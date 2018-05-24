@@ -15,8 +15,13 @@ builds:
       - amd64
 
 archive:
-  format: tar.gz
-  replacements:
-    amd64: 64-bit
-    darwin: macOS
+  wrap_in_directory: true
+  name_template: '{{ .ProjectName }}-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm
+    }}v{{ .Arm }}{{ end }}'
+  format: zip
 
+checksum:
+  name_template: '{{ .ProjectName }}-v{{ .Version }}-checksums.txt'
+
+snapshot:
+  name_template: 'dev'
