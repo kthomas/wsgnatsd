@@ -14,7 +14,7 @@ import (
 var proxy *server.Server
 
 func usage() {
-	usage := `wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-- <gnatsd opts>]\n`
+	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
 	fmt.Println(usage)
 }
 
@@ -39,8 +39,6 @@ func ParseArgs(args []string) *server.Server {
 			log.Fatal("When -cert or -key is specified, both must be supplied")
 		}
 	}
-
-	fmt.Printf("%v\n", config)
 
 	return &config
 }
@@ -76,6 +74,8 @@ func SubProcessArgs() []string {
 	var args []string
 	if inlineArgs != -1 {
 		args = os.Args[inlineArgs+1:]
+	} else {
+		args = append(args, "-a", "127.0.0.1", "-p", "-1")
 	}
 
 	return args
@@ -83,7 +83,6 @@ func SubProcessArgs() []string {
 
 func main() {
 	proxy = ParseArgs(WsProcessArgs())
-	fmt.Printf("%v\n", proxy)
 	go proxy.Start(SubProcessArgs())
 
 	handleSignals()

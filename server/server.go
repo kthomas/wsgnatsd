@@ -5,10 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"github.com/aricart/nats-server-embed/nse"
-	"github.com/gorilla/websocket"
-	"github.com/nats-cloud/nats-service-site/slog"
-	"github.com/nats-io/gnatsd/util"
 	"io"
 	"io/ioutil"
 	"log"
@@ -18,6 +14,11 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+
+	"github.com/aricart/nats-server-embed/nse"
+	"github.com/gorilla/websocket"
+	"github.com/nats-cloud/nats-service-site/slog"
+	"github.com/nats-io/gnatsd/util"
 )
 
 type Server struct {
@@ -38,7 +39,6 @@ func (s *Server) Start(natsArgs []string) error {
 		s.Shutdown()
 		return err
 	}
-
 	err = s.startHttp()
 	if err != nil {
 		s.Shutdown()
@@ -165,12 +165,11 @@ func (s *Server) startHttp() error {
 	}
 	s.httpServer = &http.Server{
 		ErrorLog: log.New(os.Stderr, "", log.LstdFlags),
-		Handler:  http.HandlerFunc(handleSession),
+		Handler:  http.HandlerFunc(s.handleSession),
 	}
 	log.Printf("[INF] starting websocket proxy at: [%v]\n", s.getWsURL())
 
 	go func() {
-		s.httpServer.ListenAndServe()
 		if err := s.httpServer.Serve(s.listener); err != nil {
 			// we orderly shutdown the server?
 			if !strings.Contains(err.Error(), "http: Server closed") {
@@ -187,7 +186,7 @@ func (s *Server) startHttp() error {
 
 var counter uint64
 
-func handleSession(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	id := atomic.AddUint64(&counter, 1)
 	upgrader := websocket.Upgrader{}
 	upgrader.CheckOrigin = func(req *http.Request) bool {
@@ -200,7 +199,8 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxy, err := NewProxyWorker(id, c, "localhost:4222")
+	// allow for different interfaces and random port on embedded server
+	proxy, err := NewProxyWorker(id, c, string(s.EmbeddedNats.Server.Addr().String()))
 	if err != nil {
 		log.Printf("[ERR] connecting to NATS: %v\n", err)
 		return
