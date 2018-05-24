@@ -1,5 +1,11 @@
+project_name: wsgnatsd
+release:
+  github:
+    owner: aricart
+    name: wsgnatsd
+  name_template: 'v{{.Tag}}'
 builds:
-  - main: main.go
+  - main: wsnatsd.go
     binary: wsgnatsd
     goos:
       - windows
