@@ -1,5 +1,5 @@
 builds:
-  - main: main.go
+  - main: wsnatsd.go
     binary: wsgnatsd
     goos:
       - windows
