@@ -3,8 +3,6 @@ package server
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,39 +20,26 @@ import (
 	"github.com/nats-io/gnatsd/util"
 )
 
+type Conf struct {
+	HostPort string
+	CertFile string
+	KeyFile  string
+	CaFile   string
+	Logger   *logger.Logger
+}
+
 type WsServer struct {
 	httpServer   *http.Server
 	listener     net.Listener
-	HostPort     string
-	CertFile     string
-	KeyFile      string
-	CaFile       string
 	natsHostPort string
 	Logger       *logger.Logger
+	Conf
 }
 
-func NewWsServer(Logger *logger.Logger) (*WsServer, error) {
-	opts := flag.NewFlagSet("ws-server", flag.ExitOnError)
-	opts.Usage = usage
-
+func NewWsServer(conf Conf, Logger *logger.Logger) (*WsServer, error) {
 	server := WsServer{}
+	server.Conf = conf
 	server.Logger = Logger
-
-	opts.StringVar(&server.HostPort, "hp", "127.0.0.1:0", "http hostport - (default is autoassigned port)")
-	opts.StringVar(&server.CaFile, "ca", "", "tls ca certificate")
-	opts.StringVar(&server.CertFile, "cert", "", "tls certificate")
-	opts.StringVar(&server.KeyFile, "key", "", "tls key")
-
-	if err := opts.Parse(server.WsProcessArgs()); err != nil {
-		usage()
-		os.Exit(0)
-	}
-
-	if server.KeyFile != "" || server.CertFile != "" {
-		if server.KeyFile == "" || server.CertFile == "" {
-			return nil, errors.New("if -cert or -key is specified, both must be supplied")
-		}
-	}
 
 	return &server, nil
 }
@@ -63,30 +48,6 @@ func (ws *WsServer) Shutdown() {
 	if ws.httpServer != nil {
 		ws.httpServer.Shutdown(nil)
 	}
-}
-
-func (ws *WsServer) WsProcessArgs() []string {
-	inlineArgs := -1
-	for i, a := range os.Args {
-		if a == "--" {
-			inlineArgs = i
-			break
-		}
-	}
-
-	var args []string
-	if inlineArgs == -1 {
-		args = os.Args[1:]
-	} else {
-		args = os.Args[1 : inlineArgs+1]
-	}
-
-	return args
-}
-
-func usage() {
-	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
-	fmt.Println(usage)
 }
 
 func (ws *WsServer) isTLS() bool {
