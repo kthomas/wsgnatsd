@@ -3,7 +3,7 @@ release:
   github:
     owner: aricart
     name: wsgnatsd
-  name_template: 'v{{.Tag}}'
+  name_template: '{{.Tag}}'
 builds:
   - main: wsnatsd.go
     binary: wsgnatsd
