@@ -1,93 +1,111 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"github.com/aricart/wsgnatsd/server"
-	"log"
 	"os"
 	"os/signal"
+	"path"
 	"runtime"
+	"strings"
 	"syscall"
+
+	"github.com/aricart/wsgnatsd/server"
+	"github.com/nats-io/gnatsd/logger"
 )
 
-var proxy *server.Server
+var bridge *Bridge
 
-func usage() {
-	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
-	fmt.Println(usage)
+type Bridge struct {
+	Logger     *logger.Logger
+	WsServer   *server.WsServer
+	NatsServer *server.NatsServer
+	PidFile    *os.File
 }
 
-func ParseArgs(args []string) *server.Server {
-	opts := flag.NewFlagSet("ws-server", flag.ExitOnError)
-	opts.Usage = usage
+func NewBridge() (*Bridge, error) {
+	var err error
+	bridge := Bridge{}
+	bridge.Logger = logger.NewStdLogger(true, true, true, true, true)
 
-	config := server.Server{}
-
-	opts.StringVar(&config.HostPort, "hp", "localhost:8080", "http hostport")
-	opts.StringVar(&config.CaFile, "ca", "", "tls ca certificate")
-	opts.StringVar(&config.CertFile, "cert", "", "tls certificate")
-	opts.StringVar(&config.KeyFile, "key", "", "tls key")
-
-	if err := opts.Parse(args); err != nil {
-		usage()
-		os.Exit(0)
+	bridge.NatsServer, err = server.NewNatsServer()
+	if err != nil {
+		return nil, err
 	}
 
-	if config.KeyFile != "" || config.CertFile != "" {
-		if config.KeyFile == "" || config.CertFile == "" {
-			log.Fatal("When -cert or -key is specified, both must be supplied")
-		}
+	bridge.WsServer, err = server.NewWsServer(bridge.Logger)
+	if err != nil {
+		return nil, err
 	}
 
-	return &config
+	return &bridge, nil
 }
 
-func WsProcessArgs() []string {
-	inlineArgs := -1
-	for i, a := range os.Args {
-		if a == "--" {
-			inlineArgs = i
-			break
-		}
+func (b *Bridge) Start() error {
+	if err := b.NatsServer.Start(); err != nil {
+		return err
+	}
+	if err := b.WsServer.Start(bridge.NatsServer.HostPort()); err != nil {
+		return err
 	}
 
-	var args []string
-	if inlineArgs == -1 {
-		args = os.Args[1:]
-	} else {
-		args = os.Args[1 : inlineArgs+1]
+	if err := b.writePidFile(); err != nil {
+		return err
 	}
 
-	return args
+	return nil
 }
 
-func SubProcessArgs() []string {
-	inlineArgs := -1
-	for i, a := range os.Args {
-		if a == "--" {
-			inlineArgs = i
-			break
-		}
+func (b *Bridge) Shutdown() {
+	b.WsServer.Shutdown()
+	b.NatsServer.Shutdown()
+	b.Cleanup()
+}
+
+func (b *Bridge) Cleanup() {
+	err := b.PidFile.Close()
+	if err != nil {
+		b.Logger.Errorf("Failed closing pid file: %v", err)
+	}
+	if err := os.Remove(b.pidPath()); err != nil {
+		b.Logger.Errorf("Failed removing pid file: %v", err)
+	}
+}
+
+func (b *Bridge) pidPath() string {
+	return path.Join(os.Getenv("TMPDIR"), fmt.Sprintf("wsgnatsd_%d.pid", os.Getpid()))
+}
+
+func (b *Bridge) writePidFile() error {
+	var err error
+	b.PidFile, err = os.Create(b.pidPath())
+	if err != nil {
+		return err
+	}
+	_, err = b.PidFile.Write([]byte(strings.Join([]string{b.WsServer.GetURL(), b.NatsServer.GetURL()}, "\n")))
+	if err != nil {
+		return err
 	}
 
-	var args []string
-	if inlineArgs != -1 {
-		args = os.Args[inlineArgs+1:]
-	} else {
-		args = append(args, "-a", "127.0.0.1", "-p", "-1")
-	}
-
-	return args
+	return nil
 }
 
 func main() {
-	proxy = ParseArgs(WsProcessArgs())
-	go proxy.Start(SubProcessArgs())
+	var err error
+	bridge, err = NewBridge()
+	if err != nil {
+		bridge.Logger.Errorf("Failed to create sub-systems: %v\n")
+		panic(err)
+	}
+
+	if err := bridge.Start(); err != nil {
+		bridge.Logger.Errorf("Failed to start sub-systems: %v\n")
+		bridge.Shutdown()
+		panic(err)
+	}
 
 	handleSignals()
 
-	if proxy != nil {
+	if bridge != nil {
 		runtime.Goexit()
 	}
 }
@@ -100,7 +118,7 @@ func handleSignals() {
 		for sig := range c {
 			switch sig {
 			case syscall.SIGINT:
-				proxy.Shutdown()
+				bridge.Shutdown()
 				os.Exit(0)
 			}
 		}
