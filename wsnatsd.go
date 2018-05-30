@@ -9,9 +9,9 @@ import (
 	"strings"
 	"syscall"
 
+	"flag"
 	"github.com/aricart/wsgnatsd/server"
 	"github.com/nats-io/gnatsd/logger"
-	"flag"
 )
 
 var bridge *Bridge
@@ -21,7 +21,7 @@ type Bridge struct {
 	WsServer   *server.WsServer
 	NatsServer *server.NatsServer
 	PidFile    *os.File
-	PidDir string
+	PidDir     string
 }
 
 func NewBridge() (*Bridge, error) {

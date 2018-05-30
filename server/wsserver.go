@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
-	"github.com/nats-cloud/nats-service-site/slog"
 	"github.com/nats-io/gnatsd/logger"
 	"github.com/nats-io/gnatsd/util"
 )
@@ -160,11 +159,11 @@ func (ws *WsServer) createTlsListen() error {
 	config.Certificates = make([]tls.Certificate, 1)
 	config.Certificates[0], err = tls.LoadX509KeyPair(ws.CertFile, ws.KeyFile)
 	if err != nil {
-		slog.Fatalf("error loading tls certs: %v", err)
+		ws.Logger.Fatalf("error loading tls certs: %v", err)
 	}
 	ws.listener, err = tls.Listen("tcp", ws.HostPort, config)
 	if err != nil {
-		slog.Fatalf("cannot listen for http requests: %v", err)
+		ws.Logger.Fatalf("cannot listen for http requests: %v", err)
 	}
 
 	return nil
@@ -181,27 +180,28 @@ func (ws *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	defer c.Close()
 	if err != nil {
-		slog.Errorf("failed to upgrade ws connection: %v", err)
+		ws.Logger.Errorf("failed to upgrade ws connection: %v", err)
 		return
 	}
 
 	// allow for different interfaces and random port on embedded server
-	proxy, err := NewProxyWorker(id, c, ws.natsHostPort)
+	proxy, err := NewProxyWorker(id, c, ws.natsHostPort, ws.Logger)
 	if err != nil {
-		slog.Errorf("failed to connect to nats: %v", err)
+		ws.Logger.Errorf("failed to connect to nats: %v", err)
 		return
 	}
 	proxy.Serve()
 }
 
 type ProxyWorker struct {
-	id   uint64
-	done chan string
-	ws   *websocket.Conn
-	tcp  net.Conn
+	id     uint64
+	done   chan string
+	ws     *websocket.Conn
+	tcp    net.Conn
+	Logger *logger.Logger
 }
 
-func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string) (*ProxyWorker, error) {
+func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, logger *logger.Logger) (*ProxyWorker, error) {
 	tcp, err := net.Dial("tcp", natsHostPort)
 	if err != nil {
 		return nil, err
@@ -212,6 +212,7 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string) (*ProxyW
 	proxy.done = make(chan string)
 	proxy.ws = ws
 	proxy.tcp = tcp
+	proxy.Logger = logger
 
 	return &proxy, nil
 }
@@ -256,7 +257,7 @@ func (pw *ProxyWorker) Serve() {
 	pw.tcp.Close()
 	pw.tcp.Close()
 	<-pw.done
-	slog.Noticef("ws-nats client [%d] closed", pw.id)
+	pw.Logger.Noticef("ws-nats client [%d] closed", pw.id)
 }
 
 func (ws *WsServer) GetURL() string {
