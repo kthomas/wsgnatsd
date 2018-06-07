@@ -227,7 +227,7 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *
 	} else {
 		proxy.frameType = websocket.TextMessage
 	}
-
+  
 	return &proxy, nil
 }
 

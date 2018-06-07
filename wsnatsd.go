@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"flag"
 	"github.com/aricart/wsgnatsd/server"
 	"github.com/nats-io/gnatsd/logger"
 )
