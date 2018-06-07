@@ -234,17 +234,17 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *
 func debugFrameType(ft int) string {
 	switch ft {
 	case websocket.TextMessage:
-		return"text message"
+		return"TEXT"
 	case websocket.BinaryMessage:
-		return"binary message"
+		return"BIN"
 	case websocket.CloseMessage:
-		return"close message"
+		return"CLOSE"
 	case websocket.PingMessage:
-		return"ping message"
+		return"PING"
 	case websocket.PongMessage:
-		return"pong message"
+		return"PONG"
 	}
-	return "unknown"
+	return "?"
 }
 
 
@@ -253,32 +253,24 @@ func (pw *ProxyWorker) Serve() {
 		for {
 			mt, data, err := pw.ws.ReadMessage()
 			if err != nil {
-				pw.logger.Noticef("err reading ws: %v", err)
+				pw.logger.Errorf("ws read: %v", err)
 				break
 			}
-			pw.logger.Noticef("ws >: %v\ntext?%t", string(data), mt == websocket.TextMessage)
-			switch mt {
-			case websocket.TextMessage:
+			pw.logger.Tracef("ws [%v] >: %v\n", debugFrameType(mt), string(data))
+
+			if mt == websocket.TextMessage || mt == websocket.BinaryMessage {
 				count, err := pw.tcp.Write(data)
 				if err != nil {
-					pw.logger.Noticef("err writing tcp: %v", err)
+					pw.logger.Errorf("tcp write: %v", err)
 				}
 				if count != len(data) {
-					pw.logger.Noticef("tcp wrote %d instead of %d", count, len(data))
+					pw.logger.Errorf("tcp wrote %d instead of %d bytes", count, len(data))
 				}
-			case websocket.BinaryMessage:
-				count, err := pw.tcp.Write(data)
-				if err != nil {
-					pw.logger.Noticef("err writing tcp: %v", err)
-				}
-				if count != len(data) {
-					pw.logger.Noticef("tcp wrote %d instead of %d", count, len(data))
-				}
-			case websocket.CloseMessage:
-				break
-			default:
-				pw.logger.Noticef("got message type %s: %v", debugFrameType(mt), string(data))
 			}
+			if mt == websocket.CloseMessage {
+				break
+			}
+
 		}
 		pw.done <- "done"
 	}()
@@ -286,18 +278,16 @@ func (pw *ProxyWorker) Serve() {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			read, err := pw.tcp.Read(buf)
+			count, err := pw.tcp.Read(buf)
 			if err != nil {
-				pw.logger.Noticef("err reading tcp: %v", err)
+				pw.logger.Errorf("tcp read: %v", err)
 				break
 			}
-			if read > 0 {
-				err := pw.ws.WriteMessage(pw.frameType, buf[0:read])
-				if err != nil {
-					pw.logger.Noticef("err writing ws: %v", err)
-					break
-				}
-				pw.logger.Noticef("tcp > %s", string(buf[0:read]))
+			pw.logger.Tracef("tcp >: %v\n", string(buf[0:count]))
+			err = pw.ws.WriteMessage(pw.frameType, buf[0:count])
+			if err != nil {
+				pw.logger.Errorf("ws write: %v", err)
+				break
 			}
 		}
 		pw.done <- "done"
