@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -141,6 +142,7 @@ func (b *Bridge) parseOptions() (server.Conf, string, error) {
 	opts.StringVar(&conf.CertFile, "cert", "", "tls certificate")
 	opts.StringVar(&conf.KeyFile, "key", "", "tls key")
 	opts.StringVar(&pidDir, "pid", os.Getenv("TMPDIR"), "pid path")
+	opts.BoolVar(&conf.Binary, "binary", false, "use binary websocket frames")
 
 	if err := opts.Parse(b.BridgeArgs()); err != nil {
 		b.usage()

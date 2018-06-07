@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -24,6 +23,7 @@ type Conf struct {
 	CertFile string
 	KeyFile  string
 	CaFile   string
+	Binary   bool
 	Logger   *logger.Logger
 }
 
@@ -85,6 +85,12 @@ func (ws *WsServer) Start(natsHostPort string) error {
 	}
 
 	ws.Logger.Noticef("Listening for websocket requests on %v\n", ws.GetURL())
+
+	frames := "text"
+	if ws.Binary {
+		frames = "binary"
+	}
+	ws.Logger.Noticef("Proxy is handling %s ws frames\n", frames)
 
 	go func() {
 		if err := ws.httpServer.Serve(ws.listener); err != nil {
@@ -185,7 +191,7 @@ func (ws *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// allow for different interfaces and random port on embedded server
-	proxy, err := NewProxyWorker(id, c, ws.natsHostPort, ws.Logger)
+	proxy, err := NewProxyWorker(id, c, ws.natsHostPort, ws)
 	if err != nil {
 		ws.Logger.Errorf("failed to connect to nats: %v", err)
 		return
@@ -194,14 +200,16 @@ func (ws *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 type ProxyWorker struct {
-	id     uint64
-	done   chan string
-	ws     *websocket.Conn
-	tcp    net.Conn
-	Logger *logger.Logger
+	id        uint64
+	done      chan string
+	ws        *websocket.Conn
+	tcp       net.Conn
+	frameType int
+	logger       *logger.Logger
+
 }
 
-func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, logger *logger.Logger) (*ProxyWorker, error) {
+func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *WsServer) (*ProxyWorker, error) {
 	tcp, err := net.Dial("tcp", natsHostPort)
 	if err != nil {
 		return nil, err
@@ -212,24 +220,57 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, logger *
 	proxy.done = make(chan string)
 	proxy.ws = ws
 	proxy.tcp = tcp
-	proxy.Logger = logger
+	proxy.logger = server.Logger
 
+	if server.Binary {
+		proxy.frameType = websocket.BinaryMessage
+	} else {
+		proxy.frameType = websocket.TextMessage
+	}
+  
 	return &proxy, nil
 }
+
+func debugFrameType(ft int) string {
+	switch ft {
+	case websocket.TextMessage:
+		return"TEXT"
+	case websocket.BinaryMessage:
+		return"BIN"
+	case websocket.CloseMessage:
+		return"CLOSE"
+	case websocket.PingMessage:
+		return"PING"
+	case websocket.PongMessage:
+		return"PONG"
+	}
+	return "?"
+}
+
 
 func (pw *ProxyWorker) Serve() {
 	go func() {
 		for {
-			mt, r, err := pw.ws.NextReader()
+			mt, data, err := pw.ws.ReadMessage()
 			if err != nil {
+				pw.logger.Errorf("ws read: %v", err)
 				break
 			}
-			if mt == websocket.TextMessage {
-				io.Copy(pw.tcp, r)
+			pw.logger.Tracef("ws [%v] >: %v\n", debugFrameType(mt), string(data))
+
+			if mt == websocket.TextMessage || mt == websocket.BinaryMessage {
+				count, err := pw.tcp.Write(data)
+				if err != nil {
+					pw.logger.Errorf("tcp write: %v", err)
+				}
+				if count != len(data) {
+					pw.logger.Errorf("tcp wrote %d instead of %d bytes", count, len(data))
+				}
 			}
 			if mt == websocket.CloseMessage {
 				break
 			}
+
 		}
 		pw.done <- "done"
 	}()
@@ -237,17 +278,16 @@ func (pw *ProxyWorker) Serve() {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			read, err := pw.tcp.Read(buf)
+			count, err := pw.tcp.Read(buf)
 			if err != nil {
+				pw.logger.Errorf("tcp read: %v", err)
 				break
 			}
-			if read > 0 {
-				writer, err := pw.ws.NextWriter(websocket.TextMessage)
-				if err != nil {
-					break
-				}
-				writer.Write(buf[0:read])
-				writer.Close()
+			pw.logger.Tracef("tcp >: %v\n", string(buf[0:count]))
+			err = pw.ws.WriteMessage(pw.frameType, buf[0:count])
+			if err != nil {
+				pw.logger.Errorf("ws write: %v", err)
+				break
 			}
 		}
 		pw.done <- "done"
@@ -255,9 +295,9 @@ func (pw *ProxyWorker) Serve() {
 
 	<-pw.done
 	pw.tcp.Close()
-	pw.tcp.Close()
+	pw.ws.Close()
 	<-pw.done
-	pw.Logger.Noticef("ws-nats client [%d] closed", pw.id)
+	pw.logger.Noticef("ws-nats client [%d] closed", pw.id)
 }
 
 func (ws *WsServer) GetURL() string {
