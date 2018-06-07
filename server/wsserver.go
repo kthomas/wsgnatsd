@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -15,7 +14,6 @@ import (
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
-	"github.com/nats-cloud/nats-service-site/slog"
 	"github.com/nats-io/gnatsd/logger"
 	"github.com/nats-io/gnatsd/util"
 )
@@ -25,6 +23,7 @@ type Conf struct {
 	CertFile string
 	KeyFile  string
 	CaFile   string
+	Binary   bool
 	Logger   *logger.Logger
 }
 
@@ -86,6 +85,12 @@ func (ws *WsServer) Start(natsHostPort string) error {
 	}
 
 	ws.Logger.Noticef("Listening for websocket requests on %v\n", ws.GetURL())
+
+	frames := "text"
+	if ws.Binary {
+		frames = "binary"
+	}
+	ws.Logger.Noticef("Proxy is handling %s ws frames\n", frames)
 
 	go func() {
 		if err := ws.httpServer.Serve(ws.listener); err != nil {
@@ -160,11 +165,11 @@ func (ws *WsServer) createTlsListen() error {
 	config.Certificates = make([]tls.Certificate, 1)
 	config.Certificates[0], err = tls.LoadX509KeyPair(ws.CertFile, ws.KeyFile)
 	if err != nil {
-		slog.Fatalf("error loading tls certs: %v", err)
+		ws.Logger.Fatalf("error loading tls certs: %v", err)
 	}
 	ws.listener, err = tls.Listen("tcp", ws.HostPort, config)
 	if err != nil {
-		slog.Fatalf("cannot listen for http requests: %v", err)
+		ws.Logger.Fatalf("cannot listen for http requests: %v", err)
 	}
 
 	return nil
@@ -181,27 +186,30 @@ func (ws *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	defer c.Close()
 	if err != nil {
-		slog.Errorf("failed to upgrade ws connection: %v", err)
+		ws.Logger.Errorf("failed to upgrade ws connection: %v", err)
 		return
 	}
 
 	// allow for different interfaces and random port on embedded server
-	proxy, err := NewProxyWorker(id, c, ws.natsHostPort)
+	proxy, err := NewProxyWorker(id, c, ws.natsHostPort, ws)
 	if err != nil {
-		slog.Errorf("failed to connect to nats: %v", err)
+		ws.Logger.Errorf("failed to connect to nats: %v", err)
 		return
 	}
 	proxy.Serve()
 }
 
 type ProxyWorker struct {
-	id   uint64
-	done chan string
-	ws   *websocket.Conn
-	tcp  net.Conn
+	id        uint64
+	done      chan string
+	ws        *websocket.Conn
+	tcp       net.Conn
+	frameType int
+	logger       *logger.Logger
+
 }
 
-func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string) (*ProxyWorker, error) {
+func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *WsServer) (*ProxyWorker, error) {
 	tcp, err := net.Dial("tcp", natsHostPort)
 	if err != nil {
 		return nil, err
@@ -212,22 +220,64 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string) (*ProxyW
 	proxy.done = make(chan string)
 	proxy.ws = ws
 	proxy.tcp = tcp
+	proxy.logger = server.Logger
+
+	if server.Binary {
+		proxy.frameType = websocket.BinaryMessage
+	} else {
+		proxy.frameType = websocket.TextMessage
+	}
 
 	return &proxy, nil
 }
 
+func debugFrameType(ft int) string {
+	switch ft {
+	case websocket.TextMessage:
+		return"text message"
+	case websocket.BinaryMessage:
+		return"binary message"
+	case websocket.CloseMessage:
+		return"close message"
+	case websocket.PingMessage:
+		return"ping message"
+	case websocket.PongMessage:
+		return"pong message"
+	}
+	return "unknown"
+}
+
+
 func (pw *ProxyWorker) Serve() {
 	go func() {
 		for {
-			mt, r, err := pw.ws.NextReader()
+			mt, data, err := pw.ws.ReadMessage()
 			if err != nil {
+				pw.logger.Noticef("err reading ws: %v", err)
 				break
 			}
-			if mt == websocket.TextMessage {
-				io.Copy(pw.tcp, r)
-			}
-			if mt == websocket.CloseMessage {
+			pw.logger.Noticef("ws >: %v\ntext?%t", string(data), mt == websocket.TextMessage)
+			switch mt {
+			case websocket.TextMessage:
+				count, err := pw.tcp.Write(data)
+				if err != nil {
+					pw.logger.Noticef("err writing tcp: %v", err)
+				}
+				if count != len(data) {
+					pw.logger.Noticef("tcp wrote %d instead of %d", count, len(data))
+				}
+			case websocket.BinaryMessage:
+				count, err := pw.tcp.Write(data)
+				if err != nil {
+					pw.logger.Noticef("err writing tcp: %v", err)
+				}
+				if count != len(data) {
+					pw.logger.Noticef("tcp wrote %d instead of %d", count, len(data))
+				}
+			case websocket.CloseMessage:
 				break
+			default:
+				pw.logger.Noticef("got message type %s: %v", debugFrameType(mt), string(data))
 			}
 		}
 		pw.done <- "done"
@@ -238,15 +288,16 @@ func (pw *ProxyWorker) Serve() {
 		for {
 			read, err := pw.tcp.Read(buf)
 			if err != nil {
+				pw.logger.Noticef("err reading tcp: %v", err)
 				break
 			}
 			if read > 0 {
-				writer, err := pw.ws.NextWriter(websocket.TextMessage)
+				err := pw.ws.WriteMessage(pw.frameType, buf[0:read])
 				if err != nil {
+					pw.logger.Noticef("err writing ws: %v", err)
 					break
 				}
-				writer.Write(buf[0:read])
-				writer.Close()
+				pw.logger.Noticef("tcp > %s", string(buf[0:read]))
 			}
 		}
 		pw.done <- "done"
@@ -254,9 +305,9 @@ func (pw *ProxyWorker) Serve() {
 
 	<-pw.done
 	pw.tcp.Close()
-	pw.tcp.Close()
+	pw.ws.Close()
 	<-pw.done
-	slog.Noticef("ws-nats client [%d] closed", pw.id)
+	pw.logger.Noticef("ws-nats client [%d] closed", pw.id)
 }
 
 func (ws *WsServer) GetURL() string {
