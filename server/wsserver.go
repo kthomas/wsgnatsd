@@ -23,7 +23,7 @@ type Conf struct {
 	CertFile string
 	KeyFile  string
 	CaFile   string
-	Binary   bool
+	Text     bool
 	Logger   *logger.Logger
 }
 
@@ -39,7 +39,6 @@ func NewWsServer(conf Conf, Logger *logger.Logger) (*WsServer, error) {
 	server := WsServer{}
 	server.Conf = conf
 	server.Logger = Logger
-
 	return &server, nil
 }
 
@@ -86,9 +85,9 @@ func (ws *WsServer) Start(natsHostPort string) error {
 
 	ws.Logger.Noticef("Listening for websocket requests on %v\n", ws.GetURL())
 
-	frames := "text"
-	if ws.Binary {
-		frames = "binary"
+	frames := "binary"
+	if ws.Text {
+		frames = "text"
 	}
 	ws.Logger.Noticef("Proxy is handling %s ws frames\n", frames)
 
@@ -205,8 +204,7 @@ type ProxyWorker struct {
 	ws        *websocket.Conn
 	tcp       net.Conn
 	frameType int
-	logger       *logger.Logger
-
+	logger    *logger.Logger
 }
 
 func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *WsServer) (*ProxyWorker, error) {
@@ -222,31 +220,30 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *
 	proxy.tcp = tcp
 	proxy.logger = server.Logger
 
-	if server.Binary {
-		proxy.frameType = websocket.BinaryMessage
-	} else {
+	if server.Text {
 		proxy.frameType = websocket.TextMessage
+	} else {
+		proxy.frameType = websocket.BinaryMessage
 	}
-  
+
 	return &proxy, nil
 }
 
 func debugFrameType(ft int) string {
 	switch ft {
 	case websocket.TextMessage:
-		return"TEXT"
+		return "TEXT"
 	case websocket.BinaryMessage:
-		return"BIN"
+		return "BIN"
 	case websocket.CloseMessage:
-		return"CLOSE"
+		return "CLOSE"
 	case websocket.PingMessage:
-		return"PING"
+		return "PING"
 	case websocket.PongMessage:
-		return"PONG"
+		return "PONG"
 	}
 	return "?"
 }
-
 
 func (pw *ProxyWorker) Serve() {
 	go func() {

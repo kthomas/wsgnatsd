@@ -10,7 +10,6 @@ import (
 	"strings"
 	"syscall"
 
-	"flag"
 	"github.com/aricart/wsgnatsd/server"
 	"github.com/nats-io/gnatsd/logger"
 )
@@ -142,7 +141,7 @@ func (b *Bridge) parseOptions() (server.Conf, string, error) {
 	opts.StringVar(&conf.CertFile, "cert", "", "tls certificate")
 	opts.StringVar(&conf.KeyFile, "key", "", "tls key")
 	opts.StringVar(&pidDir, "pid", os.Getenv("TMPDIR"), "pid path")
-	opts.BoolVar(&conf.Binary, "binary", false, "use binary websocket frames")
+	opts.BoolVar(&conf.Text, "text", false, "use text websocket frames")
 
 	if err := opts.Parse(b.BridgeArgs()); err != nil {
 		b.usage()
