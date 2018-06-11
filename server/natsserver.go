@@ -81,9 +81,9 @@ func getArgs() []string {
 	var args []string
 	if inlineArgs != -1 {
 		args = os.Args[inlineArgs+1:]
-	} else {
-		args = append(args, "-a", "127.0.0.1", "-p", "-1")
 	}
+
+	args = append(args, "-a", "127.0.0.1", "-p", "-1")
 
 	return args
 }
