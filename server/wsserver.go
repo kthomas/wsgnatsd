@@ -24,6 +24,8 @@ type Conf struct {
 	KeyFile  string
 	CaFile   string
 	Text     bool
+	Debug    bool
+	Trace    bool
 	Logger   *logger.Logger
 }
 
@@ -169,6 +171,15 @@ func (ws *WsServer) createTlsListen() error {
 	ws.listener, err = tls.Listen("tcp", ws.HostPort, config)
 	if err != nil {
 		ws.Logger.Fatalf("cannot listen for http requests: %v", err)
+	}
+
+	host, port, err := parseHostPort(ws.HostPort)
+	if port < 1 {
+		if err != nil {
+			panic(err)
+		}
+		port = ws.listener.Addr().(*net.TCPAddr).Port
+		ws.HostPort = fmt.Sprintf("%s:%d", host, port)
 	}
 
 	return nil

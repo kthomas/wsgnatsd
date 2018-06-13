@@ -27,12 +27,12 @@ type Bridge struct {
 func NewBridge() (*Bridge, error) {
 	var err error
 	bridge := Bridge{}
-	bridge.Logger = logger.NewStdLogger(true, true, true, true, true)
-
 	conf, pidDir, err := bridge.parseOptions()
 	if err != nil {
 		return nil, err
 	}
+
+	bridge.Logger = logger.NewStdLogger(true, conf.Debug, conf.Trace, true, true)
 
 	bridge.PidDir = pidDir
 	fi, err := os.Stat(bridge.PidDir)
@@ -125,7 +125,7 @@ func (b *Bridge) BridgeArgs() []string {
 }
 
 func (b *Bridge) usage() {
-	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
+	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-pid <piddir>] [-D] [-V] [-DV] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
 	fmt.Println(usage)
 }
 
@@ -134,6 +134,7 @@ func (b *Bridge) parseOptions() (server.Conf, string, error) {
 	opts.Usage = b.usage
 
 	var pidDir string
+	var debugAndTrace bool
 
 	conf := server.Conf{}
 	opts.StringVar(&conf.HostPort, "hp", "127.0.0.1:0", "http hostport - (default is autoassigned port)")
@@ -142,6 +143,14 @@ func (b *Bridge) parseOptions() (server.Conf, string, error) {
 	opts.StringVar(&conf.KeyFile, "key", "", "tls key")
 	opts.StringVar(&pidDir, "pid", os.Getenv("TMPDIR"), "pid path")
 	opts.BoolVar(&conf.Text, "text", false, "use text websocket frames")
+	opts.BoolVar(&conf.Debug, "D", false, "enable debugging output")
+	opts.BoolVar(&conf.Trace, "V", false, "enable tracing output")
+	opts.BoolVar(&debugAndTrace, "DV", false, "Debug and trace")
+
+	if debugAndTrace {
+		conf.Trace = true
+		conf.Debug = true
+	}
 
 	if err := opts.Parse(b.BridgeArgs()); err != nil {
 		b.usage()

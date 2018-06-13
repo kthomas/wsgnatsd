@@ -82,8 +82,21 @@ func getArgs() []string {
 	if inlineArgs != -1 {
 		args = os.Args[inlineArgs+1:]
 	}
-
-	args = append(args, "-a", "127.0.0.1", "-p", "-1")
+	if indexOf("-a", args) == -1 {
+		args = append(args, "-a", "127.0.0.1")
+	}
+	if indexOf("-p", args) == -1 {
+		args = append(args, "-p", "-1")
+	}
 
 	return args
+}
+
+func indexOf(v string, a []string) int {
+	for i, e := range a {
+		if v == e {
+			return i
+		}
+	}
+	return -1
 }
