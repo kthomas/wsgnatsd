@@ -42,7 +42,6 @@ func NewBridge() (*Bridge, error) {
 	if !fi.IsDir() {
 		bridge.Logger.Fatalf("PidDir [%s] is not a directory", bridge.PidDir)
 	}
-
 	bridge.NatsServer, err = server.NewNatsServer()
 	if err != nil {
 		return nil, err
@@ -125,7 +124,7 @@ func (b *Bridge) BridgeArgs() []string {
 }
 
 func (b *Bridge) usage() {
-	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-pid <piddir>] [-D] [-V] [-DV] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
+	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-X] [-pid <piddir>] [-D] [-V] [-DV] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
 	fmt.Println(usage)
 }
 

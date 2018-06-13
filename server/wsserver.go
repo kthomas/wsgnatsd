@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/gnatsd/logger"
 	"github.com/nats-io/gnatsd/util"
@@ -256,6 +257,59 @@ func debugFrameType(ft int) string {
 	return "?"
 }
 
+func printProto(a []byte) {
+	for i, v := range a {
+		fmt.Printf("%d '%c' %d\n", i, v, v)
+	}
+}
+
+func parseInfo(proto []byte) map[string]interface{} {
+	count := len(proto)
+	if count > 5 {
+		if (proto[0] == 'I' || proto[0] == 'i') &&
+			(proto[1] == 'N' || proto[1] == 'n') &&
+			(proto[2] == 'F' || proto[2] == 'f') &&
+			(proto[3] == 'O' || proto[3] == 'o') &&
+			(proto[4] == ' ' || proto[4] == '\t') &&
+			(proto[5] == '{') {
+
+			var infoArg []byte
+			for i := range proto {
+				if i+1 < count && proto[i] == '\r' && proto[i+1] == '\n' {
+					infoArg = proto[5:i]
+					break
+				}
+			}
+			info := make(map[string]interface{})
+			if err := json.Unmarshal(infoArg, &info); err != nil {
+				return nil
+			}
+			return info
+		}
+	}
+	return nil
+}
+
+func (pw *ProxyWorker) tlsRequired(proto []byte) bool {
+	tlsRequired := false
+
+	info := parseInfo(proto)
+	t := info["tls_required"]
+	if t != nil {
+		bv, ok := t.(bool)
+		if ok {
+			tlsRequired = bv
+		}
+	}
+	return tlsRequired
+}
+
+func (pw *ProxyWorker) upgrade() {
+	pw.tcp = tls.Client(pw.tcp, &tls.Config{InsecureSkipVerify: true})
+	conn := pw.tcp.(*tls.Conn)
+	conn.Handshake()
+}
+
 func (pw *ProxyWorker) Serve() {
 	go func() {
 		for {
@@ -283,6 +337,7 @@ func (pw *ProxyWorker) Serve() {
 		pw.done <- "done"
 	}()
 
+	first := true
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -290,6 +345,12 @@ func (pw *ProxyWorker) Serve() {
 			if err != nil {
 				pw.logger.Errorf("tcp read: %v", err)
 				break
+			}
+			if first {
+				first = false
+				if pw.tlsRequired(buf[0:count]) {
+					pw.upgrade()
+				}
 			}
 			pw.logger.Tracef("tcp >: %v\n", string(buf[0:count]))
 			err = pw.ws.WriteMessage(pw.frameType, buf[0:count])
