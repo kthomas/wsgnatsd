@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -87,7 +87,7 @@ func (b *Bridge) Cleanup() {
 }
 
 func (b *Bridge) pidPath() string {
-	return path.Join(b.PidDir, fmt.Sprintf("wsgnatsd_%d.pid", os.Getpid()))
+	return filepath.Join(b.PidDir, fmt.Sprintf("wsgnatsd_%d.pid", os.Getpid()))
 }
 
 func (b *Bridge) writePidFile() error {
