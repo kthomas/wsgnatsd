@@ -16,7 +16,7 @@ import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/gnatsd/logger"
-	"github.com/nats-io/gnatsd/util"
+	"github.com/nats-io/nats.go/util"
 )
 
 type Conf struct {
@@ -56,16 +56,14 @@ func (ws *WsServer) isTLS() bool {
 }
 
 func parseHostPort(hostPort string) (string, int, error) {
-	var err error
-	var host, sport string
-	var port int
-	host, sport, err = net.SplitHostPort(hostPort)
-	p, err := strconv.Atoi(sport)
+	host, sport, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		return "", 0, err
 	}
-	port = p
-	return host, port, nil
+	if p, err := strconv.Atoi(sport); err == nil {
+		return host, p, nil
+	}
+	return "", 0, err
 }
 
 func (ws *WsServer) Start(natsHostPort string) error {

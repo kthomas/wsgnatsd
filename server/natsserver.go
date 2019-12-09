@@ -67,7 +67,7 @@ func (server *NatsServer) GetURL() string {
 	return fmt.Sprintf("nats://%s", server.Server.Addr().String())
 }
 
-var usageString = "embedded NATS server options can be supplied by following a '--' argument with any gnatsd supported flag."
+var usageString = "embedded NATS server options can be supplied by following a '--' argument with any supported flag."
 
 func getArgs() []string {
 	inlineArgs := -1
