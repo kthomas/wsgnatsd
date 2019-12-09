@@ -8,9 +8,6 @@ git:
 env:
   - GO111MODULE=on
 
-before_script:
-  - curl -sL http://git.io/goreleaser | bash
-
 after_success:
 - git reset --hard
 
