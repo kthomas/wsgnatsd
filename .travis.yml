@@ -1,0 +1,20 @@
+language: go
+go:
+- 1.12.x
+
+git:
+  depth: false
+
+env:
+  - GO111MODULE=on
+
+after_success:
+- git reset --hard
+
+deploy:
+- provider: script
+  skip_cleanup: true
+  script: curl -sL http://git.io/goreleaser | bash
+  on:
+    tags: true
+    condition: $TRAVIS_OS_NAME = linux
