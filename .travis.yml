@@ -1,12 +1,12 @@
 language: go
 go:
-- 1.12.x
+- 1.13.x
 
 git:
   depth: false
 
 env:
-  - GO111MODULE=on
+  - GO111MODULE=off
 
 after_success:
 - git reset --hard

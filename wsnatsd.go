@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	"github.com/aricart/wsgnatsd/server"
-	"github.com/nats-io/gnatsd/logger"
+	"github.com/nats-io/nats-server/v2/logger"
 )
 
 var bridge *Bridge
@@ -26,7 +26,7 @@ type Bridge struct {
 
 func NewBridge() (*Bridge, error) {
 	var err error
-	bridge := Bridge{}
+	var bridge Bridge
 	conf, pidDir, err := bridge.parseOptions()
 	if err != nil {
 		return nil, err
@@ -42,10 +42,11 @@ func NewBridge() (*Bridge, error) {
 	if !fi.IsDir() {
 		bridge.Logger.Fatalf("PidDir [%s] is not a directory", bridge.PidDir)
 	}
-	bridge.NatsServer, err = server.NewNatsServer()
+	bridge.NatsServer, err = server.NewNatsServer(conf.RemoteNatsHostPort, bridge.Logger)
 	if err != nil {
 		return nil, err
 	}
+
 
 	bridge.WsServer, err = server.NewWsServer(conf, bridge.Logger)
 	if err != nil {
@@ -59,6 +60,12 @@ func (b *Bridge) Start() error {
 	if err := b.NatsServer.Start(); err != nil {
 		return err
 	}
+	kind := "embedded"
+	if b.NatsServer == nil {
+		kind = "remote"
+	}
+	bridge.Logger.Noticef("bridge using %s NATS server %s", kind, b.NatsServer.HostPort())
+
 	if err := b.WsServer.Start(bridge.NatsServer.HostPort()); err != nil {
 		return err
 	}
@@ -123,20 +130,15 @@ func (b *Bridge) BridgeArgs() []string {
 	return args
 }
 
-func (b *Bridge) usage() {
-	usage := "wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-X] [-pid <piddir>] [-D] [-V] [-DV] [-- <gnatsd opts>]\nIf no gnatsd options are provided the embedded server runs at 127.0.0.1:-1 (auto selected port)"
-	fmt.Println(usage)
-}
-
 func (b *Bridge) parseOptions() (server.Conf, string, error) {
 	opts := flag.NewFlagSet("bridge-conf", flag.ExitOnError)
-	opts.Usage = b.usage
 
 	var pidDir string
 	var debugAndTrace bool
 
 	conf := server.Conf{}
 	opts.StringVar(&conf.HostPort, "hp", "127.0.0.1:0", "http hostport - (default is autoassigned port)")
+	opts.StringVar(&conf.RemoteNatsHostPort, "rhp", "", "remote nats hostport")
 	opts.StringVar(&conf.CaFile, "ca", "", "tls ca certificate")
 	opts.StringVar(&conf.CertFile, "cert", "", "tls certificate")
 	opts.StringVar(&conf.KeyFile, "key", "", "tls key")
@@ -152,7 +154,7 @@ func (b *Bridge) parseOptions() (server.Conf, string, error) {
 	}
 
 	if err := opts.Parse(b.BridgeArgs()); err != nil {
-		b.usage()
+		opts.Usage()
 		os.Exit(0)
 	}
 

@@ -8,42 +8,64 @@ import (
 	"os"
 	"time"
 
-	"github.com/nats-io/gnatsd/logger"
-	"github.com/nats-io/gnatsd/server"
+	"github.com/nats-io/nats-server/v2/logger"
+	"github.com/nats-io/nats-server/v2/server"
 )
 
 type NatsServer struct {
+	RemoteHostPort string
 	Server *server.Server
 	Logger *logger.Logger
 }
 
-func NewNatsServer() (*NatsServer, error) {
-	// Create a FlagSet and sets the usage
-	fs := flag.NewFlagSet("nats-server", flag.ExitOnError)
-	opts, err := server.ConfigureOptions(fs, getArgs(),
-		server.PrintServerAndExit,
-		fs.Usage,
-		server.PrintTLSHelpAndDie)
+func NewNatsServer(remoteHostPort string, logger *logger.Logger) (*NatsServer, error) {
+	var ns NatsServer
+	ns.RemoteHostPort = remoteHostPort
+	ns.Logger = logger
+	if ns.RemoteHostPort == "" {
+		// Create a FlagSet and sets the usage
+		fs := flag.NewFlagSet("nats-server", flag.ExitOnError)
+		args := GetArgs()
+		hasConfig := args.indexOf("-c") != -1 || args.indexOf("-config") != -1
+		if hasConfig {
+			logger.Noticef("ignoring -a, -addr, -p and -port flags since a config was specified")
+		}
 
-	if err != nil {
-		server.PrintAndDie(err.Error() + "\n" + usageString)
+		if !hasConfig &&  args.indexOf("-a") == -1 && args.indexOf("-addr") == -1 {
+			args = append(args, "-a", "127.0.0.1")
+		}
+		if !hasConfig && args.indexOf("-p") == -1 {
+			args = append(args, "-p", "-1")
+		}
+
+		opts, err := server.ConfigureOptions(fs, args,
+			server.PrintServerAndExit,
+			fs.Usage,
+			server.PrintTLSHelpAndDie)
+
+		if err != nil {
+			server.PrintAndDie(err.Error() + "\n" + usageString)
+		}
+
+		// gnatsd will also handle the signal if this is not set
+		opts.NoSigs = true
+
+		s := server.New(opts)
+		ns.Server = s
 	}
 
-	// gnatsd will also handle the signal if this is not set
-	opts.NoSigs = true
-
-	s := server.New(opts)
-
-	return &NatsServer{Server: s}, nil
+	return &ns, nil
 }
 
 func (server *NatsServer) Start() error {
-	server.Server.ConfigureLogger()
+	if server.RemoteHostPort == "" {
+		server.Server.ConfigureLogger()
 
-	go server.Server.Start()
+		go server.Server.Start()
 
-	if !server.Server.ReadyForConnections(5 * time.Second) {
-		return errors.New("unable to start embedded gnatsd server")
+		if !server.Server.ReadyForConnections(5 * time.Second) {
+			return errors.New("unable to start embedded gnatsd server")
+		}
 	}
 
 	return nil
@@ -55,44 +77,41 @@ func (server *NatsServer) Shutdown() {
 	}
 }
 
-func (server *NatsServer) ServerPort() int {
-	return server.Server.Addr().(*net.TCPAddr).Port
-}
-
 func (server *NatsServer) HostPort() string {
-	return server.Server.Addr().(*net.TCPAddr).String()
+	if server.Server != nil {
+		return server.Server.Addr().(*net.TCPAddr).String()
+	}
+	return server.RemoteHostPort
 }
 
 func (server *NatsServer) GetURL() string {
-	return fmt.Sprintf("nats://%s", server.Server.Addr().String())
+	return fmt.Sprintf("nats://%s", server.HostPort())
 }
 
 var usageString = "embedded NATS server options can be supplied by following a '--' argument with any supported flag."
 
-func getArgs() []string {
-	inlineArgs := -1
+type Args []string
+
+func GetArgs() Args {
+	var args Args
 	for i, a := range os.Args {
 		if a == "--" {
-			inlineArgs = i
+			args = os.Args[i+1:]
 			break
 		}
 	}
-
-	var args []string
-	if inlineArgs != -1 {
-		args = os.Args[inlineArgs+1:]
-	}
-	if indexOf("-a", args) == -1 {
-		args = append(args, "-a", "127.0.0.1")
-	}
-	if indexOf("-p", args) == -1 {
-		args = append(args, "-p", "-1")
-	}
-
 	return args
 }
 
-func indexOf(v string, a []string) int {
+func (a Args) getFlag(v string) string {
+	idx := a.indexOf(v)
+	if idx != -1 && len(a) >= idx+1 {
+		return a[idx+1]
+	}
+	return ""
+}
+
+func (a Args) indexOf(v string) int {
 	for i, e := range a {
 		if v == e {
 			return i

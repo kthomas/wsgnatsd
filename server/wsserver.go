@@ -15,19 +15,19 @@ import (
 
 	"encoding/json"
 	"github.com/gorilla/websocket"
-	"github.com/nats-io/gnatsd/logger"
-	"github.com/nats-io/nats.go/util"
+	"github.com/nats-io/nats-server/v2/logger"
 )
 
 type Conf struct {
 	HostPort string
-	CertFile string
-	KeyFile  string
-	CaFile   string
-	Text     bool
-	Debug    bool
-	Trace    bool
-	Logger   *logger.Logger
+	CertFile           string
+	KeyFile            string
+	CaFile             string
+	Text               bool
+	Debug              bool
+	Trace              bool
+	Logger             *logger.Logger
+	RemoteNatsHostPort string
 }
 
 type WsServer struct {
@@ -159,7 +159,12 @@ func (ws *WsServer) createTlsListen() error {
 	if err != nil {
 		ws.Logger.Fatalf("error generating tls config: %v", err)
 	}
-	config := util.CloneTLSConfig(tlsConfig)
+
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{}
+	}
+
+	config := tlsConfig.Clone()
 	config.ClientAuth = tls.NoClientCert
 	config.PreferServerCipherSuites = true
 	config.Certificates = make([]tls.Certificate, 1)
