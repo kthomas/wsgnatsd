@@ -46,7 +46,9 @@ func NewBridge() (*Bridge, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	if bridge.NatsServer == nil {
+		return nil, nil
+	}
 
 	bridge.WsServer, err = server.NewWsServer(conf, bridge.Logger)
 	if err != nil {
@@ -173,6 +175,11 @@ func main() {
 	if err != nil {
 		bridge.Logger.Errorf("Failed to create sub-systems: %v\n")
 		panic(err)
+	}
+
+	if bridge == nil {
+		// prob help option
+		return
 	}
 
 	if err := bridge.Start(); err != nil {

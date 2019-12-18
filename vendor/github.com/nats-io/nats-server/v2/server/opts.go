@@ -196,6 +196,7 @@ type Options struct {
 	WriteDeadline         time.Duration `json:"-"`
 	MaxClosedClients      int           `json:"-"`
 	LameDuckDuration      time.Duration `json:"-"`
+	AllowBearerTokens     bool          `json:"-"`
 	// MaxTracedMsgLen is the maximum printable length for traced messages.
 	MaxTracedMsgLen int `json:"-"`
 
@@ -756,6 +757,9 @@ func (o *Options) ProcessConfigFile(configFile string) error {
 			o.ConnectErrorReports = int(v.(int64))
 		case "reconnect_error_reports":
 			o.ReconnectErrorReports = int(v.(int64))
+		case "allow_bearer_tokens":
+			o.AllowBearerTokens = v.(bool)
+			trackExplicitVal(o, &o.inConfig, "allow_bearer_tokens", o.AllowBearerTokens)
 		default:
 			if au := atomic.LoadInt32(&allowUnknownTopLevelField); au == 0 && !tk.IsUsedVariable() {
 				err := &unknownConfigFieldErr{
@@ -2964,6 +2968,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string, printVersion, printHelp, 
 	fs.StringVar(&opts.TLSKey, "tlskey", "", "Private key for server certificate.")
 	fs.StringVar(&opts.TLSCaCert, "tlscacert", "", "Client certificate CA for verification.")
 	fs.IntVar(&opts.MaxTracedMsgLen, "max_traced_msg_len", 0, "Maximum printable length for traced messages. 0 for unlimited")
+	fs.BoolVar(&opts.AllowBearerTokens, "allow_bearer_tokens", false, "Allows bearer jwt tokens to be presented - bearer jwt tokens don't require a nonce challenge response")
 
 	// The flags definition above set "default" values to some of the options.
 	// Calling Parse() here will override the default options with any value

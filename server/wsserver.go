@@ -14,12 +14,13 @@ import (
 	"sync/atomic"
 
 	"encoding/json"
+
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats-server/v2/logger"
 )
 
 type Conf struct {
-	HostPort string
+	HostPort           string
 	CertFile           string
 	KeyFile            string
 	CaFile             string

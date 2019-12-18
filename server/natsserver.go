@@ -14,8 +14,8 @@ import (
 
 type NatsServer struct {
 	RemoteHostPort string
-	Server *server.Server
-	Logger *logger.Logger
+	Server         *server.Server
+	Logger         *logger.Logger
 }
 
 func NewNatsServer(remoteHostPort string, logger *logger.Logger) (*NatsServer, error) {
@@ -31,7 +31,7 @@ func NewNatsServer(remoteHostPort string, logger *logger.Logger) (*NatsServer, e
 			logger.Noticef("ignoring -a, -addr, -p and -port flags since a config was specified")
 		}
 
-		if !hasConfig &&  args.indexOf("-a") == -1 && args.indexOf("-addr") == -1 {
+		if !hasConfig && args.indexOf("-a") == -1 && args.indexOf("-addr") == -1 {
 			args = append(args, "-a", "127.0.0.1")
 		}
 		if !hasConfig && args.indexOf("-p") == -1 {
@@ -47,10 +47,18 @@ func NewNatsServer(remoteHostPort string, logger *logger.Logger) (*NatsServer, e
 			server.PrintAndDie(err.Error() + "\n" + usageString)
 		}
 
+		if opts == nil {
+			// server was given a help arg
+			return nil, nil
+		}
+
 		// gnatsd will also handle the signal if this is not set
 		opts.NoSigs = true
 
-		s := server.New(opts)
+		s, err := server.NewServer(opts)
+		if err != nil {
+			return nil, err
+		}
 		ns.Server = s
 	}
 
