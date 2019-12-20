@@ -8,27 +8,24 @@ import (
 	"os"
 	"time"
 
-	"github.com/nats-io/nats-server/v2/logger"
 	"github.com/nats-io/nats-server/v2/server"
 )
 
 type NatsServer struct {
-	RemoteHostPort string
-	Server         *server.Server
-	Logger         *logger.Logger
+	*Opts
+	server *server.Server
 }
 
-func NewNatsServer(remoteHostPort string, logger *logger.Logger) (*NatsServer, error) {
+func NewNatsServer(o *Opts) (*NatsServer, error) {
 	var ns NatsServer
-	ns.RemoteHostPort = remoteHostPort
-	ns.Logger = logger
-	if ns.RemoteHostPort == "" {
+	ns.Opts = o
+	if ns.RemoteNatsHostPort == "" {
 		// Create a FlagSet and sets the usage
 		fs := flag.NewFlagSet("nats-server", flag.ExitOnError)
 		args := GetArgs()
 		hasConfig := args.indexOf("-c") != -1 || args.indexOf("-config") != -1
 		if hasConfig {
-			logger.Noticef("ignoring -a, -addr, -p and -port flags since a config was specified")
+			ns.Logger.Noticef("ignoring -a, -addr, -p and -port flags since a config was specified")
 		}
 
 		if !hasConfig && args.indexOf("-a") == -1 && args.indexOf("-addr") == -1 {
@@ -59,37 +56,35 @@ func NewNatsServer(remoteHostPort string, logger *logger.Logger) (*NatsServer, e
 		if err != nil {
 			return nil, err
 		}
-		ns.Server = s
+		ns.server = s
 	}
 
 	return &ns, nil
 }
 
 func (server *NatsServer) Start() error {
-	if server.RemoteHostPort == "" {
-		server.Server.ConfigureLogger()
-
-		go server.Server.Start()
-
-		if !server.Server.ReadyForConnections(5 * time.Second) {
+	if server.RemoteNatsHostPort == "" {
+		server.server.ConfigureLogger()
+		go server.server.Start()
+		if !server.server.ReadyForConnections(5 * time.Second) {
 			return errors.New("unable to start embedded gnatsd server")
 		}
 	}
-
+	server.NatsHostPort = server.HostPort()
 	return nil
 }
 
 func (server *NatsServer) Shutdown() {
-	if server.Server != nil {
-		server.Server.Shutdown()
+	if server.server != nil {
+		server.server.Shutdown()
 	}
 }
 
 func (server *NatsServer) HostPort() string {
-	if server.Server != nil {
-		return server.Server.Addr().(*net.TCPAddr).String()
+	if server.server != nil {
+		return server.server.Addr().(*net.TCPAddr).String()
 	}
-	return server.RemoteHostPort
+	return server.RemoteNatsHostPort
 }
 
 func (server *NatsServer) GetURL() string {

@@ -2,47 +2,29 @@ package server
 
 import (
 	"crypto/tls"
-	"crypto/x509"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync/atomic"
-
-	"encoding/json"
 
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats-server/v2/logger"
 )
 
-type Conf struct {
-	HostPort           string
-	CertFile           string
-	KeyFile            string
-	CaFile             string
-	Text               bool
-	Debug              bool
-	Trace              bool
-	Logger             *logger.Logger
-	RemoteNatsHostPort string
-}
-
 type WsServer struct {
+	*Opts
 	httpServer   *http.Server
 	listener     net.Listener
 	natsHostPort string
-	Logger       *logger.Logger
-	Conf
 }
 
-func NewWsServer(conf Conf, Logger *logger.Logger) (*WsServer, error) {
-	server := WsServer{}
-	server.Conf = conf
-	server.Logger = Logger
+func NewWsServer(opts *Opts) (*WsServer, error) {
+	var server WsServer
+	server.Opts = opts
 	return &server, nil
 }
 
@@ -56,47 +38,42 @@ func (ws *WsServer) isTLS() bool {
 	return ws.CertFile != ""
 }
 
-func parseHostPort(hostPort string) (string, int, error) {
-	host, sport, err := net.SplitHostPort(hostPort)
-	if err != nil {
-		return "", 0, err
-	}
-	if p, err := strconv.Atoi(sport); err == nil {
-		return host, p, nil
-	}
-	return "", 0, err
-}
-
 func (ws *WsServer) Start(natsHostPort string) error {
 	ws.natsHostPort = natsHostPort
 
 	//start listening
 	if ws.isTLS() {
-		if err := ws.createTlsListen(); err != nil {
+		l, err := createTlsListen(ws.WSHostPort, ws.CertFile, ws.KeyFile, ws.CaFile)
+		if err != nil {
 			return err
 		}
+		ws.listener = l
 	} else {
-		if err := ws.createHttpListen(); err != nil {
+		l, err := createListen(ws.WSHostPort)
+		if err != nil {
 			return err
 		}
+		ws.listener = l
 	}
+	ws.WSHostPort = hostPort(ws.listener)
+
 	ws.httpServer = &http.Server{
-		ErrorLog: log.New(os.Stderr, "", log.LstdFlags),
+		ErrorLog: log.New(os.Stderr, "ws", log.LstdFlags),
 		Handler:  http.HandlerFunc(ws.handleSession),
 	}
 
 	ws.Logger.Noticef("Listening for websocket requests on %v\n", ws.GetURL())
 
 	frames := "binary"
-	if ws.Text {
+	if ws.TextFrames {
 		frames = "text"
 	}
-	ws.Logger.Noticef("Proxy is handling %s ws frames\n", frames)
+	ws.Logger.Noticef("Proxy is using %s ws frames\n", frames)
 
 	go func() {
 		if err := ws.httpServer.Serve(ws.listener); err != nil {
 			// we orderly shutdown the server?
-			if !strings.Contains(err.Error(), "http: Server closed") {
+			if !strings.Contains(err.Error(), "http: server closed") {
 				ws.Logger.Fatalf("HTTP server error: %v\n", err)
 				panic(err)
 			}
@@ -105,87 +82,6 @@ func (ws *WsServer) Start(natsHostPort string) error {
 		ws.httpServer = nil
 		ws.Logger.Noticef("HTTP server has stopped\n")
 	}()
-
-	return nil
-}
-
-func (ws *WsServer) createHttpListen() error {
-	var err error
-	ws.listener, err = net.Listen("tcp", ws.HostPort)
-	if err != nil {
-		return fmt.Errorf("cannot listen for http requests: %v", err)
-	}
-	// if the port was auto selected, update the config
-	host, port, err := parseHostPort(ws.HostPort)
-	if port < 1 {
-		if err != nil {
-			panic(err)
-		}
-		port = ws.listener.Addr().(*net.TCPAddr).Port
-		ws.HostPort = fmt.Sprintf("%s:%d", host, port)
-	}
-	return err
-}
-
-func (ws *WsServer) makeTLSConfig() (*tls.Config, error) {
-	cert, err := tls.LoadX509KeyPair(ws.CertFile, ws.KeyFile)
-	if err != nil {
-		ws.Logger.Fatalf("error parsing key: %v", err)
-	}
-	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		ws.Logger.Fatalf("error parsing cert: %v", err)
-	}
-	config := tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS10,
-	}
-
-	if ws.CaFile != "" {
-		caCert, err := ioutil.ReadFile(ws.CaFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		caPool := x509.NewCertPool()
-		if ok := caPool.AppendCertsFromPEM(caCert); !ok {
-			ws.Logger.Fatalf("error parsing ca cert")
-		}
-		config.RootCAs = caPool
-	}
-	return &config, nil
-}
-
-func (ws *WsServer) createTlsListen() error {
-	tlsConfig, err := ws.makeTLSConfig()
-	if err != nil {
-		ws.Logger.Fatalf("error generating tls config: %v", err)
-	}
-
-	if tlsConfig == nil {
-		tlsConfig = &tls.Config{}
-	}
-
-	config := tlsConfig.Clone()
-	config.ClientAuth = tls.NoClientCert
-	config.PreferServerCipherSuites = true
-	config.Certificates = make([]tls.Certificate, 1)
-	config.Certificates[0], err = tls.LoadX509KeyPair(ws.CertFile, ws.KeyFile)
-	if err != nil {
-		ws.Logger.Fatalf("error loading tls certs: %v", err)
-	}
-	ws.listener, err = tls.Listen("tcp", ws.HostPort, config)
-	if err != nil {
-		ws.Logger.Fatalf("cannot listen for http requests: %v", err)
-	}
-
-	host, port, err := parseHostPort(ws.HostPort)
-	if port < 1 {
-		if err != nil {
-			panic(err)
-		}
-		port = ws.listener.Addr().(*net.TCPAddr).Port
-		ws.HostPort = fmt.Sprintf("%s:%d", host, port)
-	}
 
 	return nil
 }
@@ -236,7 +132,7 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *
 	proxy.tcp = tcp
 	proxy.logger = server.Logger
 
-	if server.Text {
+	if server.TextFrames {
 		proxy.frameType = websocket.TextMessage
 	} else {
 		proxy.frameType = websocket.BinaryMessage
@@ -378,5 +274,5 @@ func (ws *WsServer) GetURL() string {
 	if ws.isTLS() {
 		protocol = "wss"
 	}
-	return fmt.Sprintf("%s://%s", protocol, ws.HostPort)
+	return fmt.Sprintf("%s://%s", protocol, ws.WSHostPort)
 }

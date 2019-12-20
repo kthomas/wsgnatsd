@@ -1,5 +1,7 @@
 # github.com/gorilla/websocket v1.4.1
 github.com/gorilla/websocket
+# github.com/mitchellh/go-homedir v1.1.0
+github.com/mitchellh/go-homedir
 # github.com/nats-io/jwt v0.3.3-0.20191217183112-d4d149352589
 github.com/nats-io/jwt
 # github.com/nats-io/nats-server/v2 v2.0.1-0.20190625001713-2db76bde3329 => /Users/aricart/Dropbox/code/go-mod-projects/nats-server

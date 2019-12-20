@@ -5,7 +5,7 @@ release:
     name: wsgnatsd
   name_template: '{{.Tag}}'
 builds:
-  - main: wsnatsd.go
+  - main: main.go
     binary: wsgnatsd
     goos:
       - windows

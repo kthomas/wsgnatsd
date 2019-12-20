@@ -2,6 +2,7 @@ module github.com/aricart/wsgnatsd
 
 require (
 	github.com/gorilla/websocket v1.4.1
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/nats-io/nats-server/v2 v2.0.1-0.20190625001713-2db76bde3329
 )
 

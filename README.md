@@ -1,16 +1,72 @@
 # WebSocket NATS Server
 
-A WebSocket Server embedding a [NATS](https://nats.io/) server.
+A WebSocket Server embedding a [NATS](https://nats.io/) server used for development
+while NATS server gets own native WS/S support.
+
+This server has 3 different servers:
+
+- Asset Server
+- WebSocket Server
+- NATS Server
 
 
-```bash
-wsgnatsd [-hp localhost:8080] [-cert <certfile>] [-key <keyfile>] [-ca <cacert>] [-- <gnatsd opts>]
+## Asset Server
+
+Is an HTTP server that can serve content from a document root. The server processes all files 
+and replaces `{{WSURL}}` with the WebSocket URL for the WS server.
+
+To enable asset serving specify the `-p` with a port and the `-d` with the document root.
+
+
+## WebSocket Server
+
+This server is just a proxy server to a NATS server. The NATS server can be the embedded
+server or a remote server (from `-rhp`). WebSocket connections are proxied over to the
+embedded NATS Server or the hostport specified by `-rhp`. Note that the connection between
+WS and NATS server is *always* in the clear.
+
+
+## NATS Server
+
+A full NATS Server. Additional options can be passed to it by passing `--` followed by any
+allowed NATS server options. By default ports for the embedded NATS server are auto selected,
+if a `-c` or `-config` option is specified, the server will reject port/host port options.
+
+
+## Flags
+```
+  -D	debug - enable debugging output
+  -V	trace - enable tracing output
+  -c string
+    	configuration file
+  -ca string
+    	cafile - ca certificate file for asset and ws servers
+  -cert string
+    	certfile - certificate file for asset and ws servers
+  -d string
+    	dir - asset directory, requires depends port
+  -key string
+    	keyfile - certificate key for asset and ws servers
+  -p int
+    	port - http port for asset server default is no asset server (default -1)
+  -pid string
+    	piddir - piddir path for auto assigned port information (default "/var/folders/tk/05x7yv5n1z1c5s6r89y6gd0w0000gn/T/")
+  -rhp string
+    	remotenatshostport - disables embedded NATS and proxies requests to the specified hostport
+  -text
+    	textframes - use text websocket frames
+  -whp string
+    	wshostport - (default is auto port) (default "127.0.0.1:0")
 ```
 
-The suggested use of this server is to run the `wsgnatsd` to serve as a gateway enabling the use of NATS on browsers. Websocket NATS clients such as [ws-nats](https://github.com/nats-io/ws-nats). 
- If the certificate options (`-cert`, `-key`) are provided, the server will serve securely.
- 
-Typically the wsgnatsd won't serve other NATS clients outside of the localhost. Other NATS servers should instead cluster to the wsgnatsd. Such topology will save one layer of encryption as the embedded WS server can exchange messages with the embedded NATS server without encrypting.
+## Examples
 
-wsgnatsd doesn't limit configuration options. After passing a `--` flag, all arguments that follow are forwarded directly to the embedded NATS server, providing full access to all configuration
-options available to the NATS server.
+```bash
+wsgnatsd -p 80 -d /tmp/docroot
+wsgnatsd -c /path/to/conf -- -c /path/to/natsserver.conf -DV
+wsgnatsd -p 80 -whp 127.0.0.1:8080
+wsgnatsd -rhp localhost:4222
+```
+
+
+
