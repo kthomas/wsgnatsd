@@ -63,7 +63,7 @@ func (b *Bridge) Start() error {
 	}
 	bridge.Logger.Noticef("Bridge using %s NATS server %s", kind, b.NatsServer.HostPort())
 
-	if err := b.WsServer.Start(bridge.NatsServer.HostPort()); err != nil {
+	if err := b.WsServer.Start(); err != nil {
 		return err
 	}
 
@@ -222,7 +222,9 @@ func handleSignals() {
 		for sig := range c {
 			switch sig {
 			case syscall.SIGINT:
-				assetServer.Shutdown()
+				if assetServer != nil {
+					assetServer.Shutdown()
+				}
 				bridge.Shutdown()
 				os.Exit(0)
 			}

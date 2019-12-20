@@ -36,8 +36,8 @@ func DefaultOpts() Opts {
 	return c
 }
 
-func LoadOpts(filepath string) (*Opts, error) {
-	b, err := ioutil.ReadFile(filepath)
+func LoadOpts(fp string) (*Opts, error) {
+	b, err := ioutil.ReadFile(fp)
 	if err != nil {
 		return nil, fmt.Errorf("error reading configuration file: %v", err)
 	}
@@ -130,17 +130,9 @@ func ParseOpts(c string) (*Opts, error) {
 func parseIntValue(keyName string, v interface{}) (int, error) {
 	i := 0
 	var err error
-	switch v.(type) {
-	case int:
-		i = int(v.(int))
-	case int8:
-		i = int(v.(int8))
-	case int16:
-		i = int(v.(int16))
-	case int32:
-		i = int(v.(int32))
-	case int64:
-		i = int(v.(int64))
+	switch t := v.(type) {
+	case int, int8, int16, int32, int64:
+		i = t.(int)
 	case string:
 		i, err = strconv.Atoi(v.(string))
 		if err != nil {
@@ -155,7 +147,7 @@ func parseIntValue(keyName string, v interface{}) (int, error) {
 func parseStringValue(keyName string, v interface{}) (string, error) {
 	sv, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("Error parsing %s option %q", keyName, v)
+		return "", fmt.Errorf("error parsing %s option %q", keyName, v)
 	}
 	return sv, nil
 }

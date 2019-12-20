@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -17,9 +18,8 @@ import (
 
 type WsServer struct {
 	*Opts
-	httpServer   *http.Server
-	listener     net.Listener
-	natsHostPort string
+	s *http.Server
+	l net.Listener
 }
 
 func NewWsServer(opts *Opts) (*WsServer, error) {
@@ -28,59 +28,48 @@ func NewWsServer(opts *Opts) (*WsServer, error) {
 	return &server, nil
 }
 
-func (ws *WsServer) Shutdown() {
-	if ws.httpServer != nil {
-		ws.httpServer.Shutdown(nil)
+func (s *WsServer) Shutdown() {
+	if s.s != nil {
+		_ = s.s.Shutdown(context.TODO())
 	}
 }
 
-func (ws *WsServer) isTLS() bool {
-	return ws.CertFile != ""
+func (s *WsServer) isTLS() bool {
+	return s.CertFile != ""
 }
 
-func (ws *WsServer) Start(natsHostPort string) error {
-	ws.natsHostPort = natsHostPort
-
-	//start listening
-	if ws.isTLS() {
-		l, err := createTlsListen(ws.WSHostPort, ws.CertFile, ws.KeyFile, ws.CaFile)
-		if err != nil {
-			return err
-		}
-		ws.listener = l
-	} else {
-		l, err := createListen(ws.WSHostPort)
-		if err != nil {
-			return err
-		}
-		ws.listener = l
+func (s *WsServer) Start() error {
+	l, err := CreateListen(s.WSHostPort, s.Opts)
+	if err != nil {
+		return err
 	}
-	ws.WSHostPort = hostPort(ws.listener)
+	s.l = l
+	s.WSHostPort = hostPort(s.l)
 
-	ws.httpServer = &http.Server{
-		ErrorLog: log.New(os.Stderr, "ws", log.LstdFlags),
-		Handler:  http.HandlerFunc(ws.handleSession),
+	s.s = &http.Server{
+		ErrorLog: log.New(os.Stderr, "s", log.LstdFlags),
+		Handler:  http.HandlerFunc(s.handleSession),
 	}
 
-	ws.Logger.Noticef("Listening for websocket requests on %v\n", ws.GetURL())
+	s.Logger.Noticef("Listening for websocket requests on %v\n", s.GetURL())
 
 	frames := "binary"
-	if ws.TextFrames {
+	if s.TextFrames {
 		frames = "text"
 	}
-	ws.Logger.Noticef("Proxy is using %s ws frames\n", frames)
+	s.Logger.Noticef("Proxy is using %s s frames\n", frames)
 
 	go func() {
-		if err := ws.httpServer.Serve(ws.listener); err != nil {
-			// we orderly shutdown the server?
-			if !strings.Contains(err.Error(), "http: server closed") {
-				ws.Logger.Fatalf("HTTP server error: %v\n", err)
+		if err := s.s.Serve(s.l); err != nil {
+			// we orderly shutdown the s?
+			if !strings.Contains(err.Error(), "Server closed") {
+				s.Logger.Fatalf("wsserver error: %v\n", err)
 				panic(err)
 			}
 		}
-		ws.httpServer.Handler = nil
-		ws.httpServer = nil
-		ws.Logger.Noticef("HTTP server has stopped\n")
+		s.s.Handler = nil
+		s.s = nil
+		s.Logger.Noticef("wsserver stopped\n")
 	}()
 
 	return nil
@@ -88,23 +77,22 @@ func (ws *WsServer) Start(natsHostPort string) error {
 
 var counter uint64
 
-func (ws *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
+func (s *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	id := atomic.AddUint64(&counter, 1)
 	upgrader := websocket.Upgrader{}
 	upgrader.CheckOrigin = func(req *http.Request) bool {
 		return true
 	}
 	c, err := upgrader.Upgrade(w, r, nil)
-	defer c.Close()
 	if err != nil {
-		ws.Logger.Errorf("failed to upgrade ws connection: %v", err)
+		s.Logger.Errorf("failed to upgrade ws connection: %v", err)
 		return
 	}
+	defer c.Close()
 
-	// allow for different interfaces and random port on embedded server
-	proxy, err := NewProxyWorker(id, c, ws.natsHostPort, ws)
+	proxy, err := NewProxyWorker(id, c, s.NatsHostPort, s)
 	if err != nil {
-		ws.Logger.Errorf("failed to connect to nats: %v", err)
+		s.Logger.Errorf("failed to connect to nats: %v", err)
 		return
 	}
 	proxy.Serve()
@@ -157,7 +145,7 @@ func debugFrameType(ft int) string {
 	return "?"
 }
 
-func printProto(a []byte) {
+func PrintProto(a []byte) {
 	for i, v := range a {
 		fmt.Printf("%d '%c' %d\n", i, v, v)
 	}
@@ -269,10 +257,10 @@ func (pw *ProxyWorker) Serve() {
 	pw.logger.Noticef("ws-nats client [%d] closed", pw.id)
 }
 
-func (ws *WsServer) GetURL() string {
-	protocol := "ws"
-	if ws.isTLS() {
+func (s *WsServer) GetURL() string {
+	protocol := "s"
+	if s.isTLS() {
 		protocol = "wss"
 	}
-	return fmt.Sprintf("%s://%s", protocol, ws.WSHostPort)
+	return fmt.Sprintf("%s://%s", protocol, s.WSHostPort)
 }

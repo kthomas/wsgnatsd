@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -16,8 +17,8 @@ import (
 
 type AssetsServer struct {
 	*Opts
-	httpServer *http.Server
-	listener   net.Listener
+	s *http.Server
+	l net.Listener
 }
 
 func NewAssetsServer(conf *Opts) (*AssetsServer, error) {
@@ -105,43 +106,36 @@ func (s *AssetsServer) filter() http.Handler {
 
 func (s *AssetsServer) Start() error {
 	hp := fmt.Sprintf("0.0.0.0:%d", s.Port)
-	if s.Opts.CertFile != "" {
-		l, err := createTlsListen(hp, s.Opts.CertFile, s.Opts.KeyFile, s.Opts.CaFile)
-		if err != nil {
-			return err
-		}
-		s.listener = l
-	} else {
-		l, err := createListen(hp)
-		if err != nil {
-			return err
-		}
-		s.listener = l
+	l, err := CreateListen(hp, s.Opts)
+	if err != nil {
+		return err
 	}
-	s.httpServer = &http.Server{
+
+	s.l = l
+	s.s = &http.Server{
 		ErrorLog: log.New(os.Stderr, "ws", log.LstdFlags),
 		Handler:  s.filter(),
 	}
-	s.Logger.Noticef("Listening for asset requests on %v\n", hostPort(s.listener))
+	s.Logger.Noticef("Listening for asset requests on %v\n", hostPort(s.l))
 
 	go func() {
-		if err := s.httpServer.Serve(s.listener); err != nil {
-			// we orderly shutdown the server?
-			if !strings.Contains(err.Error(), "http: server closed") {
-				s.Logger.Fatalf("Asset server error: %v\n", err)
+		if err := s.s.Serve(s.l); err != nil {
+			// we orderly shutdown the s?
+			if !strings.Contains(err.Error(), "Server closed") {
+				s.Logger.Fatalf("assetserver error: %v\n", err)
 				panic(err)
 			}
 		}
-		s.httpServer.Handler = nil
-		s.httpServer = nil
-		s.Logger.Noticef("Asset server has stopped\n")
+		s.s.Handler = nil
+		s.s = nil
+		s.Logger.Noticef("asset server has stopped\n")
 	}()
 
 	return nil
 }
 
-func (ws *AssetsServer) Shutdown() {
-	if ws.httpServer != nil {
-		ws.httpServer.Shutdown(nil)
+func (s *AssetsServer) Shutdown() {
+	if s.s != nil {
+		s.s.Shutdown(context.TODO())
 	}
 }

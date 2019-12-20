@@ -10,16 +10,19 @@ import (
 	"net"
 )
 
-func hostPort(listen net.Listener) string {
-	return listen.Addr().(*net.TCPAddr).String()
+func hostPort(l net.Listener) string {
+	return l.Addr().(*net.TCPAddr).String()
 }
 
-func createListen(hp string) (net.Listener, error) {
+func CreateListen(hp string, o *Opts) (net.Listener, error) {
+	if o.CertFile != "" {
+		return createTlsListen(hp, o)
+	}
 	return net.Listen("tcp", hp)
 }
 
-func makeTLSConfig(certFile string, keyFile string, caFile string) (*tls.Config, error) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+func makeTLSConfig(o *Opts) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(o.CertFile, o.KeyFile)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +35,8 @@ func makeTLSConfig(certFile string, keyFile string, caFile string) (*tls.Config,
 		MinVersion:   tls.VersionTLS10,
 	}
 
-	if caFile != "" {
-		caCert, err := ioutil.ReadFile(caFile)
+	if o.CaFile != "" {
+		caCert, err := ioutil.ReadFile(o.CaFile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -46,8 +49,8 @@ func makeTLSConfig(certFile string, keyFile string, caFile string) (*tls.Config,
 	return &config, nil
 }
 
-func createTlsListen(hp string, certFile string, keyFile string, caFile string) (net.Listener, error) {
-	tlsConfig, err := makeTLSConfig(caFile, keyFile, caFile)
+func createTlsListen(hp string, o *Opts) (net.Listener, error) {
+	tlsConfig, err := makeTLSConfig(o)
 	if err != nil {
 		return nil, fmt.Errorf("error generating tls config: %v", err)
 	}
@@ -60,7 +63,7 @@ func createTlsListen(hp string, certFile string, keyFile string, caFile string) 
 	config.ClientAuth = tls.NoClientCert
 	config.PreferServerCipherSuites = true
 	config.Certificates = make([]tls.Certificate, 1)
-	config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	config.Certificates[0], err = tls.LoadX509KeyPair(o.CertFile, o.KeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("error loading tls certs: %v", err)
 	}
