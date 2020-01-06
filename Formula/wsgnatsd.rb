@@ -2,21 +2,21 @@
 class Wsgnatsd < Formula
   desc "A websocket server proxy for nats-server"
   homepage "https://github.com/aricart/wsgnatsd"
-  version "0.8.8"
+  version "0.8.10"
   bottle :unneeded
 
   if OS.mac?
-    url "https://github.com/aricart/wsgnatsd/releases/download/v0.8.8/wsgnatsd-v0.8.8-darwin-amd64.zip"
-    sha256 "b63b558835ee9901f3d7c812ecf886c442016ffabd584e62d6b331d47e7ee665"
+    url "https://github.com/aricart/wsgnatsd/releases/download/v0.8.10/wsgnatsd-v0.8.10-darwin-amd64.zip"
+    sha256 "38a1e1242a6a429a92849333956244edd53123e05e8461171a3900b3b1a2bb23"
   elsif OS.linux?
     if Hardware::CPU.intel?
-      url "https://github.com/aricart/wsgnatsd/releases/download/v0.8.8/wsgnatsd-v0.8.8-darwin-amd64.zip"
-      sha256 "a84909a04795cbeea2a9c5049f60a3c6042522bdf8be48eafdbbbc346045b01a"
+      url "https://github.com/aricart/wsgnatsd/releases/download/v0.8.10/wsgnatsd-v0.8.10-darwin-amd64.zip"
+      sha256 "d758aa5ff8903b0c25cf267c16697810ccb7ec769a8b658f62e0019e7f035943"
     end
   end
 
   def install
-    bin.install "program"
+    bin.install "wsgnatsd"
   end
 
   test do
