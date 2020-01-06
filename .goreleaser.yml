@@ -40,4 +40,4 @@ brews:
     test: |
       system "#{bin}/wsgnatsd --help"
     install: |
-      bin.install "program"
+      bin.install "wsgnatsd"
