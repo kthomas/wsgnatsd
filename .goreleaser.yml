@@ -32,7 +32,7 @@ brews:
     folder: Formula
     github:
       owner: aricart
-      name: wsgnatsd
+      name: homebrew-wsgnatsd
     url_template: "https://github.com/aricart/wsgnatsd/releases/download/{{ .Tag }}/wsgnatsd-{{ .Tag }}-darwin-amd64.zip"
     homepage: "https://github.com/aricart/wsgnatsd"
     description: "A websocket server proxy for nats-server"
