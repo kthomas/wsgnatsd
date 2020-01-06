@@ -26,3 +26,18 @@ checksum:
 
 snapshot:
   name_template: 'dev'
+
+brews:
+  - name: wsgnatsd
+    folder: Formula
+    github:
+      owner: aricart
+      name: wsgnatsd
+    url_template: "https://github.com/aricart/wsgnatsd/releases/download/{{ .Tag }}/wsgnatsd-darwin-amd64.zip"
+    homepage: "https://github.com/aricart/wsgnatsd"
+    description: "A websocket server proxy for nats-server"
+    skip_upload: true
+    test: |
+      system "#{bin}/wsgnatsd --help"
+    install: |
+      bin.install "program"
