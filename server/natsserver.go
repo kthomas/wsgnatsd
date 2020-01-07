@@ -21,7 +21,7 @@ func NewNatsServer(o *Opts) (*NatsServer, error) {
 	ns.Opts = o
 	if ns.RemoteNatsHostPort == "" {
 		// Create a FlagSet and sets the usage
-		fs := flag.NewFlagSet("nats-s", flag.ExitOnError)
+		fs := flag.NewFlagSet("nats-server", flag.ExitOnError)
 		args := GetArgs()
 		hasConfig := args.IndexOfFlag("-c") != -1 || args.IndexOfFlag("-config") != -1
 		if hasConfig {

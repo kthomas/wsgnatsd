@@ -258,7 +258,7 @@ func (pw *ProxyWorker) Serve() {
 }
 
 func (s *WsServer) GetURL() string {
-	protocol := "s"
+	protocol := "ws"
 	if s.isTLS() {
 		protocol = "wss"
 	}
