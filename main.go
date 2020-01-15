@@ -3,16 +3,13 @@ package main
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 
-	"github.com/kthomas/wsgnatsd/server"
 	"github.com/kthomas/nats-server/v2/logger"
+	"github.com/kthomas/wsgnatsd/server"
 )
 
 var bridge *Bridge
@@ -23,7 +20,7 @@ type Bridge struct {
 	*server.Opts
 	WsServer   *server.WsServer
 	NatsServer *server.NatsServer
-	PidFile    *os.File
+	// PidFile    *os.File
 }
 
 func NewBridge(o *server.Opts) (*Bridge, error) {
@@ -31,13 +28,14 @@ func NewBridge(o *server.Opts) (*Bridge, error) {
 	var bridge Bridge
 	bridge.Opts = o
 
-	fi, err := os.Stat(bridge.PidDir)
-	if os.IsNotExist(err) {
-		bridge.Logger.Fatalf("piddir [%s] doesn't exist", bridge.PidDir)
-	}
-	if !fi.IsDir() {
-		bridge.Logger.Fatalf("piddir [%s] is not a directory", bridge.PidDir)
-	}
+	// fi, err := os.Stat(bridge.PidDir)
+	// if os.IsNotExist(err) {
+	// 	bridge.Logger.Fatalf("piddir [%s] doesn't exist", bridge.PidDir)
+	// }
+	// if !fi.IsDir() {
+	// 	bridge.Logger.Fatalf("piddir [%s] is not a directory", bridge.PidDir)
+	// }
+
 	bridge.NatsServer, err = server.NewNatsServer(o)
 	if err != nil {
 		return nil, err
@@ -68,9 +66,9 @@ func (b *Bridge) Start() error {
 		return err
 	}
 
-	if err := b.writePidFile(); err != nil {
-		return err
-	}
+	// if err := b.writePidFile(); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -78,36 +76,36 @@ func (b *Bridge) Start() error {
 func (b *Bridge) Shutdown() {
 	b.WsServer.Shutdown()
 	b.NatsServer.Shutdown()
-	b.Cleanup()
+	// b.Cleanup()
 }
 
 func (b *Bridge) Cleanup() {
-	err := b.PidFile.Close()
-	if err != nil {
-		b.Logger.Errorf("Failed closing pid file: %v", err)
-	}
-	if err := os.Remove(b.pidPath()); err != nil {
-		b.Logger.Errorf("Failed removing pid file: %v", err)
-	}
+	// err := b.PidFile.Close()
+	// if err != nil {
+	// 	b.Logger.Errorf("Failed closing pid file: %v", err)
+	// }
+	// if err := os.Remove(b.pidPath()); err != nil {
+	// 	b.Logger.Errorf("Failed removing pid file: %v", err)
+	// }
 }
 
-func (b *Bridge) pidPath() string {
-	return filepath.Join(b.PidDir, fmt.Sprintf("wsgnatsd_%d.pid", os.Getpid()))
-}
+// func (b *Bridge) pidPath() string {
+// 	return filepath.Join(b.PidDir, fmt.Sprintf("wsgnatsd_%d.pid", os.Getpid()))
+// }
 
-func (b *Bridge) writePidFile() error {
-	var err error
-	b.PidFile, err = os.Create(b.pidPath())
-	if err != nil {
-		return err
-	}
-	_, err = b.PidFile.Write([]byte(strings.Join([]string{b.WsServer.GetURL(), b.NatsServer.GetURL()}, "\n")))
-	if err != nil {
-		return err
-	}
+// func (b *Bridge) writePidFile() error {
+// 	var err error
+// 	b.PidFile, err = os.Create(b.pidPath())
+// 	if err != nil {
+// 		return err
+// 	}
+// 	_, err = b.PidFile.Write([]byte(strings.Join([]string{b.WsServer.GetURL(), b.NatsServer.GetURL()}, "\n")))
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func BridgeArgs() []string {
 	inlineArgs := -1
@@ -134,14 +132,11 @@ func parseFlags() (*server.Opts, error) {
 	var confFile string
 	c := server.DefaultOpts()
 	opts.StringVar(&confFile, "c", "", "configuration file")
-	opts.IntVar(&c.Port, "p", c.Port, "port - http port for asset server default is no asset server")
-	opts.StringVar(&c.Dir, "d", c.Dir, "dir - asset directory, requires depends port")
-	opts.StringVar(&c.WSHostPort, "whp", c.WSHostPort, "wshostport - (default is auto port)")
-	opts.StringVar(&c.RemoteNatsHostPort, "rhp", c.RemoteNatsHostPort, "remotenatshostport - disables embedded NATS and proxies requests to the specified hostport")
-	opts.StringVar(&c.CaFile, "ca", c.CaFile, "cafile - ca certificate file for asset and ws servers")
-	opts.StringVar(&c.CertFile, "cert", c.CertFile, "certfile - certificate file for asset and ws servers")
-	opts.StringVar(&c.KeyFile, "key", c.KeyFile, "keyfile - certificate key for asset and ws servers")
-	opts.StringVar(&c.PidDir, "pid", c.PidDir, "piddir - piddir path for auto assigned port information")
+	opts.StringVar(&c.WSHostPort, "h", c.WSHostPort, "ws-host - default is 127.0.0.1:4219")
+	opts.StringVar(&c.RemoteNatsHostPort, "nh", c.RemoteNatsHostPort, "nats-host - disables embedded NATS and proxies requests to the specified hostport")
+	opts.StringVar(&c.CaFile, "ca", c.CaFile, "cafile - ca certificate file for ws server")
+	opts.StringVar(&c.CertFile, "cert", c.CertFile, "certfile - certificate file for ws server")
+	opts.StringVar(&c.KeyFile, "key", c.KeyFile, "keyfile - certificate key for ws server")
 	opts.BoolVar(&c.TextFrames, "text", c.TextFrames, "textframes - use text websocket frames")
 	opts.BoolVar(&c.Debug, "D", c.Debug, "debug - enable debugging output")
 	opts.BoolVar(&c.Trace, "V", c.Trace, "trace - enable tracing output")

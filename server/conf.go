@@ -72,31 +72,13 @@ func ParseOpts(c string) (*Opts, error) {
 				panic(err)
 			}
 			o.Debug = v
-		case "dir":
-			v, err := parseStringValue(k, v)
-			if err != nil {
-				panic(err)
-			}
-			o.Dir = v
 		case "keyfile":
 			v, err := parseStringValue(k, v)
 			if err != nil {
 				panic(err)
 			}
 			o.KeyFile = v
-		case "piddir":
-			v, err := parseStringValue(k, v)
-			if err != nil {
-				panic(err)
-			}
-			o.PidDir = v
-		case "port":
-			v, err := parseIntValue(k, v)
-			if err != nil {
-				panic(err)
-			}
-			o.Port = v
-		case "remotenatshostport":
+		case "nats-host":
 			v, err := parseStringValue(k, v)
 			if err != nil {
 				panic(err)
@@ -114,7 +96,7 @@ func ParseOpts(c string) (*Opts, error) {
 				panic(err)
 			}
 			o.Trace = v
-		case "wshostport":
+		case "ws-host":
 			v, err := parseStringValue(k, v)
 			if err != nil {
 				panic(err)
