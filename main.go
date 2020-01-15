@@ -11,12 +11,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aricart/wsgnatsd/server"
-	"github.com/nats-io/nats-server/v2/logger"
+	"github.com/kthomas/wsgnatsd/server"
+	"github.com/kthomas/nats-server/v2/logger"
 )
 
 var bridge *Bridge
-var assetServer *server.AssetsServer
+
+// var assetServer *server.AssetsServer
 
 type Bridge struct {
 	*server.Opts
@@ -196,16 +197,16 @@ func main() {
 		panic(err)
 	}
 
-	if o.Port > 0 {
-		as, err := server.NewAssetsServer(o)
-		if err != nil {
-			panic(err)
-		}
-		if err := as.Start(); err != nil {
-			panic(err)
-		}
-		assetServer = as
-	}
+	// if o.Port > 0 {
+	// 	as, err := server.NewAssetsServer(o)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	if err := as.Start(); err != nil {
+	// 		panic(err)
+	// 	}
+	// 	assetServer = as
+	// }
 
 	handleSignals()
 
@@ -222,9 +223,9 @@ func handleSignals() {
 		for sig := range c {
 			switch sig {
 			case syscall.SIGINT:
-				if assetServer != nil {
-					assetServer.Shutdown()
-				}
+				// if assetServer != nil {
+				// 	assetServer.Shutdown()
+				// }
 				bridge.Shutdown()
 				os.Exit(0)
 			}
