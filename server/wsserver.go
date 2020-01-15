@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -77,12 +78,38 @@ func (s *WsServer) Start() error {
 
 var counter uint64
 
+func (s *WsServer) parseBearerToken(r *http.Request) (*string, error) {
+	authorization := r.Header.Get("authorization")
+	if authorization == "" {
+		if s.WSRequireAuthorization {
+			return nil, errors.New("no bearer authorization header provided")
+		}
+		return nil, nil
+	}
+
+	hdrprts := strings.Split(authorization, "bearer ")
+	if s.WSRequireAuthorization && len(hdrprts) != 2 {
+		return nil, errors.New("invalid bearer authorization header provided")
+	}
+
+	token := hdrprts[1]
+	s.Logger.Debugf("resolved bearer token %s", token)
+	return &token, nil
+}
+
 func (s *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	id := atomic.AddUint64(&counter, 1)
 	upgrader := websocket.Upgrader{}
 	upgrader.CheckOrigin = func(req *http.Request) bool {
 		return true
 	}
+
+	token, err := s.parseBearerToken(r)
+	if err != nil {
+		w.WriteHeader(401)
+		w.Write([]byte(fmt.Sprintf("unauthorized: %v", err)))
+	}
+
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.Logger.Errorf("failed to upgrade ws connection: %v", err)
@@ -90,7 +117,7 @@ func (s *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 
-	proxy, err := NewProxyWorker(id, c, s.NatsHostPort, s)
+	proxy, err := NewProxyWorker(id, c, s.NatsHostPort, s, token)
 	if err != nil {
 		s.Logger.Errorf("failed to connect to nats: %v", err)
 		return
@@ -99,26 +126,29 @@ func (s *WsServer) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 type ProxyWorker struct {
-	id        uint64
-	done      chan string
-	ws        *websocket.Conn
-	tcp       net.Conn
-	frameType int
-	logger    *logger.Logger
+	id          uint64
+	bearerToken *string
+	done        chan string
+	ws          *websocket.Conn
+	tcp         net.Conn
+	frameType   int
+	logger      *logger.Logger
 }
 
-func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *WsServer) (*ProxyWorker, error) {
+func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *WsServer, bearerToken *string) (*ProxyWorker, error) {
 	tcp, err := net.Dial("tcp", natsHostPort)
 	if err != nil {
 		return nil, err
 	}
 
-	proxy := ProxyWorker{}
-	proxy.id = id
-	proxy.done = make(chan string)
-	proxy.ws = ws
-	proxy.tcp = tcp
-	proxy.logger = server.Logger
+	proxy := &ProxyWorker{
+		id:          id,
+		bearerToken: bearerToken,
+		done:        make(chan string),
+		ws:          ws,
+		tcp:         tcp,
+		logger:      server.Logger,
+	}
 
 	if server.TextFrames {
 		proxy.frameType = websocket.TextMessage
@@ -126,7 +156,7 @@ func NewProxyWorker(id uint64, ws *websocket.Conn, natsHostPort string, server *
 		proxy.frameType = websocket.BinaryMessage
 	}
 
-	return &proxy, nil
+	return proxy, nil
 }
 
 func debugFrameType(ft int) string {
@@ -192,10 +222,25 @@ func (pw *ProxyWorker) tlsRequired(proto []byte) bool {
 	return tlsRequired
 }
 
-func (pw *ProxyWorker) upgrade() {
+func (pw *ProxyWorker) upgrade() error {
 	pw.tcp = tls.Client(pw.tcp, &tls.Config{InsecureSkipVerify: true})
 	conn := pw.tcp.(*tls.Conn)
-	conn.Handshake()
+	err := conn.Handshake()
+	if err != nil {
+		pw.logger.Errorf("failed to upgrade websocket connection: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (pw *ProxyWorker) authenticate() error {
+	cmsg := fmt.Sprintf("CONNECT {\"jwt\":%q,\"verbose\":true,\"pedantic\":true}\r\nPING\r\n", *pw.bearerToken)
+	_, err := pw.tcp.Write([]byte(cmsg))
+	if err != nil {
+		pw.logger.Errorf("failed to send CONNECT message; %v", err)
+		return err
+	}
+	return nil
 }
 
 func (pw *ProxyWorker) Serve() {
@@ -220,7 +265,6 @@ func (pw *ProxyWorker) Serve() {
 			if mt == websocket.CloseMessage {
 				break
 			}
-
 		}
 		pw.done <- "done"
 	}()
@@ -234,12 +278,26 @@ func (pw *ProxyWorker) Serve() {
 				pw.logger.Errorf("tcp read: %v", err)
 				break
 			}
+
 			if first {
 				first = false
 				if pw.tlsRequired(buf[0:count]) {
-					pw.upgrade()
+					err := pw.upgrade()
+					if err != nil {
+						pw.logger.Errorf("tcp read: %v", err)
+						break
+					}
+				}
+
+				if pw.bearerToken != nil {
+					err := pw.authenticate()
+					if err != nil {
+						pw.logger.Errorf("NATS authorization failed: %v", err)
+						break
+					}
 				}
 			}
+
 			pw.logger.Tracef("tcp >: %v\n", string(buf[0:count]))
 			err = pw.ws.WriteMessage(pw.frameType, buf[0:count])
 			if err != nil {

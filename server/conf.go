@@ -21,6 +21,9 @@ type Opts struct {
 	TextFrames         bool
 	Trace              bool
 	WSHostPort         string
+
+	// when true, the authorization http header provided to the websocket request in the form `bearer: <jwt>` is implicitly used to send a CONNECT message to NATS upon successful connection
+	WSRequireAuthorization bool
 }
 
 func DefaultOpts() Opts {
@@ -96,6 +99,12 @@ func ParseOpts(c string) (*Opts, error) {
 				panic(err)
 			}
 			o.WSHostPort = v
+		case "ws-require-authorization":
+			v, err := parseBooleanValue(k, v)
+			if err != nil {
+				panic(err)
+			}
+			o.WSRequireAuthorization = v
 		default:
 			return nil, fmt.Errorf("error parsing store configuration. Unknown field %q", k)
 		}
