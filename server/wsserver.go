@@ -57,7 +57,7 @@ func (s *WsServer) Start() error {
 	if s.TextFrames {
 		frames = "text"
 	}
-	s.Logger.Noticef("Proxy is using %s s frames\n", frames)
+	s.Logger.Noticef("Proxy is using %s frames\n", frames)
 
 	go func() {
 		if err := s.s.Serve(s.l); err != nil {

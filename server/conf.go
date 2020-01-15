@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"strconv"
 	"strings"
 
@@ -15,11 +14,8 @@ type Opts struct {
 	CaFile             string
 	CertFile           string
 	Debug              bool
-	Dir                string
 	KeyFile            string
 	Logger             *logger.Logger
-	PidDir             string
-	Port               int
 	RemoteNatsHostPort string
 	NatsHostPort       string
 	TextFrames         bool
@@ -29,9 +25,7 @@ type Opts struct {
 
 func DefaultOpts() Opts {
 	var c Opts
-	c.Port = -1
-	c.WSHostPort = "127.0.0.1:0"
-	c.PidDir = os.Getenv("TMPDIR")
+	c.WSHostPort = "127.0.0.1:4219"
 
 	return c
 }
@@ -101,7 +95,7 @@ func ParseOpts(c string) (*Opts, error) {
 			if err != nil {
 				panic(err)
 			}
-			o.Dir = v
+			o.WSHostPort = v
 		default:
 			return nil, fmt.Errorf("error parsing store configuration. Unknown field %q", k)
 		}

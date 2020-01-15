@@ -12,63 +12,62 @@ import (
 	"github.com/kthomas/wsgnatsd/server"
 )
 
-var bridge *Bridge
+const bridgeTypeEmbedded = "embedded"
+const bridgeTypeRemote = "remote"
 
-// var assetServer *server.AssetsServer
+var bridge *Bridge
 
 type Bridge struct {
 	*server.Opts
-	WsServer   *server.WsServer
+	Type       string
 	NatsServer *server.NatsServer
-	// PidFile    *os.File
+	WsServer   *server.WsServer
 }
 
-func NewBridge(o *server.Opts) (*Bridge, error) {
+func NewBridge(opts *server.Opts) (*Bridge, error) {
 	var err error
-	var bridge Bridge
-	bridge.Opts = o
 
-	// fi, err := os.Stat(bridge.PidDir)
-	// if os.IsNotExist(err) {
-	// 	bridge.Logger.Fatalf("piddir [%s] doesn't exist", bridge.PidDir)
-	// }
-	// if !fi.IsDir() {
-	// 	bridge.Logger.Fatalf("piddir [%s] is not a directory", bridge.PidDir)
-	// }
+	var natsServer *server.NatsServer
+	var wsServer *server.WsServer
+	var bridgeType string
 
-	bridge.NatsServer, err = server.NewNatsServer(o)
-	if err != nil {
-		return nil, err
-	}
-	if bridge.NatsServer == nil {
-		return nil, nil
+	if opts.RemoteNatsHostPort == "" {
+		bridgeType = bridgeTypeEmbedded
+	} else {
+		bridgeType = bridgeTypeRemote
 	}
 
-	bridge.WsServer, err = server.NewWsServer(o)
+	natsServer, err = server.NewNatsServer(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return &bridge, nil
+	wsServer, err = server.NewWsServer(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Bridge{
+		opts,
+		bridgeType,
+		natsServer,
+		wsServer,
+	}, nil
 }
 
 func (b *Bridge) Start() error {
-	if err := b.NatsServer.Start(); err != nil {
-		return err
+	if b.Type == bridgeTypeEmbedded {
+		if err := b.NatsServer.Start(); err != nil {
+			return err
+		}
 	}
-	kind := "embedded"
-	if b.NatsServer == nil {
-		kind = "remote"
-	}
-	bridge.Logger.Noticef("Bridge using %s NATS server %s", kind, b.NatsServer.HostPort())
+
+	b.WsServer.NatsHostPort = b.NatsServer.HostPort()
+	bridge.Logger.Noticef("Bridge using %s NATS server %s", b.Type, b.NatsServer.HostPort())
 
 	if err := b.WsServer.Start(); err != nil {
 		return err
 	}
-
-	// if err := b.writePidFile(); err != nil {
-	// 	return err
-	// }
 
 	return nil
 }
@@ -76,36 +75,7 @@ func (b *Bridge) Start() error {
 func (b *Bridge) Shutdown() {
 	b.WsServer.Shutdown()
 	b.NatsServer.Shutdown()
-	// b.Cleanup()
 }
-
-func (b *Bridge) Cleanup() {
-	// err := b.PidFile.Close()
-	// if err != nil {
-	// 	b.Logger.Errorf("Failed closing pid file: %v", err)
-	// }
-	// if err := os.Remove(b.pidPath()); err != nil {
-	// 	b.Logger.Errorf("Failed removing pid file: %v", err)
-	// }
-}
-
-// func (b *Bridge) pidPath() string {
-// 	return filepath.Join(b.PidDir, fmt.Sprintf("wsgnatsd_%d.pid", os.Getpid()))
-// }
-
-// func (b *Bridge) writePidFile() error {
-// 	var err error
-// 	b.PidFile, err = os.Create(b.pidPath())
-// 	if err != nil {
-// 		return err
-// 	}
-// 	_, err = b.PidFile.Write([]byte(strings.Join([]string{b.WsServer.GetURL(), b.NatsServer.GetURL()}, "\n")))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }
 
 func BridgeArgs() []string {
 	inlineArgs := -1
@@ -192,17 +162,6 @@ func main() {
 		panic(err)
 	}
 
-	// if o.Port > 0 {
-	// 	as, err := server.NewAssetsServer(o)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	if err := as.Start(); err != nil {
-	// 		panic(err)
-	// 	}
-	// 	assetServer = as
-	// }
-
 	handleSignals()
 
 	if bridge != nil {
@@ -218,9 +177,6 @@ func handleSignals() {
 		for sig := range c {
 			switch sig {
 			case syscall.SIGINT:
-				// if assetServer != nil {
-				// 	assetServer.Shutdown()
-				// }
 				bridge.Shutdown()
 				os.Exit(0)
 			}
