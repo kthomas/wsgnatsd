@@ -3,11 +3,13 @@ package main
 import (
 	"errors"
 	"flag"
+	"log"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 
+	selfsignedcert "github.com/kthomas/go-self-signed-cert"
 	"github.com/kthomas/nats-server/v2/logger"
 	"github.com/kthomas/wsgnatsd/server"
 )
@@ -134,6 +136,13 @@ func parseFlags() (*server.Opts, error) {
 		if c.KeyFile == "" || c.CertFile == "" {
 			panic("if -cert or -key is specified, both must be supplied")
 		}
+	} else {
+		privKeyPath, certPath, err := selfsignedcert.GenerateToDisk([]string{})
+		if err != nil {
+			log.Panicf("failed to generate self-signed certificate; %s", err.Error())
+		}
+		c.KeyFile = *privKeyPath
+		c.CertFile = *certPath
 	}
 
 	return &c, nil
