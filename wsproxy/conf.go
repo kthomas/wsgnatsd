@@ -28,7 +28,7 @@ type Opts struct {
 
 func DefaultOpts() Opts {
 	var c Opts
-	c.WSHostPort = "127.0.0.1:4219"
+	c.WSHostPort = "127.0.0.1:4221"
 
 	return c
 }

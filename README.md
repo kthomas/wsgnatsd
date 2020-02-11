@@ -27,7 +27,7 @@ if a `-c` or `-config` option is specified, the server will reject port/host por
   -c string
      configuration file
   -h string
-     ws-host - default is 127.0.0.1:4219
+     ws-host - default is 127.0.0.1:4221
   -nh string
      nats-host - disables embedded NATS and proxies requests to the specified hostport
   -ca string

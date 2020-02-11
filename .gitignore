@@ -25,6 +25,8 @@ _cgo_export.*
 *.iml
 
 wsgnatsd
+.private.key
+.server.crt
 
 # Miscellaneous
 .DS_Store
