@@ -11,7 +11,7 @@ import (
 
 	selfsignedcert "github.com/kthomas/go-self-signed-cert"
 	"github.com/kthomas/nats-server/v2/logger"
-	"github.com/kthomas/wsgnatsd/server"
+	"github.com/kthomas/wsgnatsd/wsproxy"
 )
 
 const bridgeTypeEmbedded = "embedded"
@@ -20,17 +20,17 @@ const bridgeTypeRemote = "remote"
 var bridge *Bridge
 
 type Bridge struct {
-	*server.Opts
+	*wsproxy.Opts
 	Type       string
-	NatsServer *server.NatsServer
-	WsServer   *server.WsServer
+	NatsServer *wsproxy.NatsServer
+	WsServer   *wsproxy.WsServer
 }
 
-func NewBridge(opts *server.Opts) (*Bridge, error) {
+func NewBridge(opts *wsproxy.Opts) (*Bridge, error) {
 	var err error
 
-	var natsServer *server.NatsServer
-	var wsServer *server.WsServer
+	var natsServer *wsproxy.NatsServer
+	var wsServer *wsproxy.WsServer
 	var bridgeType string
 
 	if opts.RemoteNatsHostPort == "" {
@@ -39,12 +39,12 @@ func NewBridge(opts *server.Opts) (*Bridge, error) {
 		bridgeType = bridgeTypeRemote
 	}
 
-	natsServer, err = server.NewNatsServer(opts)
+	natsServer, err = wsproxy.NewNatsServer(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	wsServer, err = server.NewWsServer(opts)
+	wsServer, err = wsproxy.NewWsServer(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -98,11 +98,11 @@ func BridgeArgs() []string {
 	return args
 }
 
-func parseFlags() (*server.Opts, error) {
+func parseFlags() (*wsproxy.Opts, error) {
 	opts := flag.NewFlagSet("bridge-c", flag.ExitOnError)
 
 	var confFile string
-	c := server.DefaultOpts()
+	c := wsproxy.DefaultOpts()
 	opts.StringVar(&confFile, "c", "", "configuration file")
 	opts.StringVar(&c.WSHostPort, "h", c.WSHostPort, "ws-host - default is 127.0.0.1:4219")
 	opts.BoolVar(&c.WSRequireAuthorization, "a", c.WSRequireAuthorization, "ws-require-authorization - when true, the authorization http header provided to the websocket request in the form `bearer: <jwt>` is implicitly used to send a CONNECT message to NATS")
@@ -125,7 +125,7 @@ func parseFlags() (*server.Opts, error) {
 	}
 
 	if confFile != "" {
-		fc, err := server.LoadOpts(confFile)
+		fc, err := wsproxy.LoadOpts(confFile)
 		if err != nil {
 			return nil, err
 		}
