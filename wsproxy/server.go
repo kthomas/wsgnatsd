@@ -26,6 +26,10 @@ type natsBridge struct {
 
 // ListenAndServe runs an embedded instance of the NATS websocket proxy
 func ListenAndServe() {
+	main()
+}
+
+func main() {
 	o, err := parseFlags()
 	if err != nil {
 		panic(err)
