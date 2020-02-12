@@ -24,13 +24,18 @@ type natsBridge struct {
 	wsServer   *WsServer
 }
 
-// ListenAndServe runs an embedded instance of the NATS websocket proxy
+// ListenAndServe runs a standalone instance of the NATS websocket proxy
 func ListenAndServe() {
-	main()
+	main(false)
 }
 
-func main() {
-	o, err := parseFlags()
+// ListenAndServeEmbedded runs an embedded instance of the NATS websocket proxy
+func ListenAndServeEmbedded() {
+	main(true)
+}
+
+func main(embedded bool) {
+	o, err := parseFlags(embedded)
 	if err != nil {
 		panic(err)
 	}
@@ -118,8 +123,14 @@ func natsBridgeArgs() []string {
 	return args
 }
 
-func parseFlags() (*Opts, error) {
-	opts := flag.NewFlagSet("bridge-c", flag.ExitOnError)
+func parseFlags(embedded bool) (*Opts, error) {
+	flagsetName := "wsgnatsd"
+	flagsetErrHandling := flag.ContinueOnError
+	if embedded {
+		flagsetName = ""
+		flagsetErrHandling = flag.ExitOnError
+	}
+	opts := flag.NewFlagSet(flagsetName, flagsetErrHandling)
 
 	var confFile string
 	c := DefaultOpts()
@@ -136,8 +147,10 @@ func parseFlags() (*Opts, error) {
 
 	a := natsBridgeArgs()
 	if err := opts.Parse(a); err != nil {
-		opts.Usage()
-		os.Exit(0)
+		if !embedded {
+			opts.Usage()
+			os.Exit(0)
+		}
 	}
 
 	if confFile != "" && len(a) > 0 {
