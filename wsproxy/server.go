@@ -125,10 +125,10 @@ func natsBridgeArgs() []string {
 
 func parseFlags(embedded bool) (*Opts, error) {
 	flagsetName := "wsgnatsd"
-	flagsetErrHandling := flag.ContinueOnError
+	flagsetErrHandling := flag.ExitOnError
 	if embedded {
 		flagsetName = ""
-		flagsetErrHandling = flag.ExitOnError
+		flagsetErrHandling = flag.ContinueOnError
 	}
 	opts := flag.NewFlagSet(flagsetName, flagsetErrHandling)
 
