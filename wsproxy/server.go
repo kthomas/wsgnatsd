@@ -1,7 +1,6 @@
 package wsproxy
 
 import (
-	"errors"
 	"flag"
 	"log"
 	"os"
