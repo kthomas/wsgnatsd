@@ -132,9 +132,9 @@ func parseFlags(embedded bool) (*Opts, error) {
 	}
 	opts := flag.NewFlagSet(flagsetName, flagsetErrHandling)
 
-	var confFile string
+	//var confFile string
 	c := DefaultOpts()
-	opts.StringVar(&confFile, "c", "", "configuration file")
+	//opts.StringVar(&confFile, "c", "", "configuration file")
 	opts.StringVar(&c.WSHostPort, "h", c.WSHostPort, "ws-host - default is 0.0.0.0:4221")
 	opts.BoolVar(&c.WSRequireAuthorization, "a", c.WSRequireAuthorization, "ws-require-authorization - when true, the authorization http header provided to the websocket request in the form `bearer: <jwt>` is implicitly used to send a CONNECT message to NATS")
 	opts.BoolVar(&c.WSRequireTLS, "wstls", c.WSRequireTLS, "require-tls - require the use of TLS by generating self-signed certificate")
@@ -152,18 +152,6 @@ func parseFlags(embedded bool) (*Opts, error) {
 			opts.Usage()
 			os.Exit(0)
 		}
-	}
-
-	if confFile != "" && len(a) > 0 {
-		return nil, errors.New("no additional flags for the bridge can be specified in the command")
-	}
-
-	if confFile != "" {
-		fc, err := LoadOpts(confFile)
-		if err != nil {
-			return nil, err
-		}
-		c = *fc
 	}
 
 	if c.KeyFile != "" || c.CertFile != "" {
