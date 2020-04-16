@@ -11,6 +11,7 @@ import (
 )
 
 type Opts struct {
+	Auth               string // not currently used
 	CaFile             string
 	CertFile           string
 	Debug              bool
@@ -53,6 +54,12 @@ func ParseOpts(c string) (*Opts, error) {
 	for k, v := range m {
 		k = strings.ToLower(k)
 		switch k {
+		case "auth":
+			v, err := parseStringValue(k, v)
+			if err != nil {
+				panic(err)
+			}
+			o.Auth = v
 		case "cafile":
 			v, err := parseStringValue(k, v)
 			if err != nil {
